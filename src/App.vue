@@ -1,5 +1,9 @@
 <template>
-  <RouterView />
+  <div class="tm-app-root">
+    <RouterView v-slot="{ Component }">
+      <component :is="Component" />
+    </RouterView>
+  </div>
 </template>
 
 <style>
@@ -39,5 +43,9 @@ textarea {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+.tm-app-root {
+  min-height: 100vh;
 }
 </style>

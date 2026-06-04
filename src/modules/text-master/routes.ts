@@ -1,3 +1,12 @@
+import type { Component } from 'vue';
+import Exports from './pages/Exports.vue';
+import Home from './pages/Home.vue';
+import ProjectCenter from './pages/ProjectCenter.vue';
+import ProjectCreate from './pages/ProjectCreate.vue';
+import ProjectWorkspace from './pages/ProjectWorkspace.vue';
+import Settings from './pages/Settings.vue';
+import Templates from './pages/Templates.vue';
+
 export type TextMasterRouteName =
   | 'text-master-home'
   | 'text-master-project-center'
@@ -10,7 +19,7 @@ export type TextMasterRouteName =
 export type TextMasterRouteRecord = {
   path: string;
   name: TextMasterRouteName;
-  component: () => Promise<unknown>;
+  component: Component;
   meta: {
     appId: 'text-master';
     title: string;
@@ -62,7 +71,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.home,
     name: 'text-master-home',
-    component: () => import('./pages/Home.vue'),
+    component: Home,
     meta: {
       appId: 'text-master',
       title: 'Home',
@@ -71,7 +80,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.projectCenter,
     name: 'text-master-project-center',
-    component: () => import('./pages/ProjectCenter.vue'),
+    component: ProjectCenter,
     meta: {
       appId: 'text-master',
       title: 'Project Center',
@@ -80,7 +89,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.projectCreate,
     name: 'text-master-project-create',
-    component: () => import('./pages/ProjectCreate.vue'),
+    component: ProjectCreate,
     meta: {
       appId: 'text-master',
       title: 'Create Project',
@@ -89,7 +98,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.projectWorkspace,
     name: 'text-master-project-workspace',
-    component: () => import('./pages/ProjectWorkspace.vue'),
+    component: ProjectWorkspace,
     meta: {
       appId: 'text-master',
       title: 'Project Workspace',
@@ -98,7 +107,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.templates,
     name: 'text-master-templates',
-    component: () => import('./pages/Templates.vue'),
+    component: Templates,
     meta: {
       appId: 'text-master',
       title: 'Templates',
@@ -107,7 +116,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.exports,
     name: 'text-master-exports',
-    component: () => import('./pages/Exports.vue'),
+    component: Exports,
     meta: {
       appId: 'text-master',
       title: 'Exports',
@@ -116,7 +125,7 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
   {
     path: textMasterRoutePaths.settings,
     name: 'text-master-settings',
-    component: () => import('./pages/Settings.vue'),
+    component: Settings,
     meta: {
       appId: 'text-master',
       title: 'Settings',

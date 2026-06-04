@@ -1,199 +1,206 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import {
-  getTextMasterProjectPath,
-  textMasterRoutePaths,
-} from '../routes';
-import { listDocuments } from '../services/documentService';
-import { listProjects } from '../services/projectService';
-import { listVersions } from '../services/versionService';
-import type { TextProject } from '../types/project';
+import { getTextMasterProjectPath, textMasterRoutePaths } from '../routes';
 
-const projects = ref<TextProject[]>([]);
-const documentCount = ref(0);
-const todayVersionCount = ref(0);
-const loadError = ref('');
+const pipelineSteps = [
+  { name: '创作设定', status: '已完成' },
+  { name: '资料库', status: '已连接' },
+  { name: '大纲工厂', status: '运行中' },
+  { name: '正文生产', status: '待开始' },
+  { name: '改写工厂', status: '待开始' },
+  { name: '审核工厂', status: '待处理' },
+  { name: '版本记录', status: '自动开启' },
+  { name: '导出中心', status: '可用' },
+];
 
-const recentProjects = computed(() => projects.value.slice(0, 3));
-const totalWordCount = computed(() =>
-  projects.value.reduce((total, project) => total + project.wordCount, 0),
-);
-const averageProgress = computed(() => {
-  if (projects.value.length === 0) {
-    return 0;
-  }
+const stats = [
+  { label: '项目总数', value: '3', note: '进行中的项目' },
+  { label: '本周生成字数', value: '2,710', note: '较上周 ↑18%' },
+  { label: '待审核文档', value: '4', note: '需要处理' },
+  { label: '最新导出', value: '1', note: '今日导出' },
+];
 
-  return Math.round(
-    projects.value.reduce((total, project) => total + project.progress, 0) /
-      projects.value.length,
-  );
-});
+const recentProjects = [
+  {
+    type: '商业文案',
+    title: 'AI 写作工具发布文案',
+    step: '审核工厂',
+    progress: 70,
+    path: getTextMasterProjectPath('project-copy-demo'),
+  },
+  {
+    type: '短剧项目',
+    title: '便利店夜班',
+    step: '大纲工厂',
+    progress: 12,
+    path: getTextMasterProjectPath('project-drama-demo'),
+  },
+];
 
-onMounted(async () => {
-  try {
-    const [projectItems, documentItems, versionItems] = await Promise.all([
-      listProjects(),
-      listDocuments(),
-      listVersions(),
-    ]);
+const todayTasks = [
+  '审核《AI 写作工具发布文案》',
+  '补全《便利店夜班》主角设定',
+  '导出 README 文档',
+];
 
-    projects.value = projectItems;
-    documentCount.value = documentItems.length;
-    todayVersionCount.value = versionItems.filter((version) =>
-      isToday(version.createdAt),
-    ).length;
-  } catch (error) {
-    loadError.value =
-      error instanceof Error ? error.message : '无法加载本地项目数据';
-  }
-});
-
-function isToday(value: string): boolean {
-  const date = new Date(value);
-  const now = new Date();
-
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
-}
-
-function formatUpdatedAt(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
+const quickTemplates = ['短剧分集大纲', '小说章节生成', '小红书文案', '项目 README'];
 </script>
 
 <template>
-  <main class="tm-home-page">
-    <section class="tm-hero-panel">
-      <div class="tm-hero-copy">
-        <p class="tm-runtime-badge">Local Mode</p>
-        <h1>Text Master</h1>
-        <p class="tm-subtitle">结构化文本生产工厂</p>
-        <p class="tm-intro">
-          独立运行、独立存储、独立导出的文本生产 App。当前不依赖
-          Brain Hub，也不是 Brain Hub 的内部页面。
-        </p>
-        <div class="tm-action-row" aria-label="Text Master actions">
-          <RouterLink
-            class="tm-button tm-button-primary"
-            :to="textMasterRoutePaths.projectCreate"
-          >
-            新建文本项目
-          </RouterLink>
-          <RouterLink class="tm-button" :to="textMasterRoutePaths.projectCenter">
-            打开项目中心
-          </RouterLink>
-          <RouterLink class="tm-button" :to="textMasterRoutePaths.templates">
-            模板中心
-          </RouterLink>
-          <RouterLink class="tm-button" :to="textMasterRoutePaths.settings">
-            设置
-          </RouterLink>
-        </div>
+  <main class="tm-home-page" data-testid="text-master-home">
+    <nav class="tm-home-topbar" aria-label="Text Master home navigation">
+      <RouterLink class="tm-home-brand" :to="textMasterRoutePaths.home">
+        <span class="tm-brand-mark">TM</span>
+        <strong>Text Master</strong>
+      </RouterLink>
+
+      <div class="tm-home-nav-links">
+        <RouterLink :to="textMasterRoutePaths.projectCenter">项目中心</RouterLink>
+        <RouterLink :to="textMasterRoutePaths.templates">模板中心</RouterLink>
+        <RouterLink :to="textMasterRoutePaths.exports">导出中心</RouterLink>
+        <RouterLink :to="textMasterRoutePaths.settings">设置</RouterLink>
       </div>
 
-      <aside class="tm-status-console" aria-label="Local runtime status">
-        <div class="tm-console-line">
-          <span>Runtime</span>
-          <strong>Local Mode</strong>
-        </div>
-        <div class="tm-console-line">
-          <span>Storage</span>
-          <strong>localStorage</strong>
-        </div>
-        <div class="tm-console-line">
-          <span>Hub</span>
-          <strong>Optional</strong>
-        </div>
-        <p>
-          可被 Brain Hub 启动和同步，但当前以独立运行模式打开。
-        </p>
-      </aside>
-    </section>
+      <div class="tm-home-status">
+        <span class="tm-status-pill">Local Mode</span>
+        <span class="tm-status-pill ready">Brain Hub Ready</span>
+        <button class="tm-profile-button" type="button" data-testid="user-profile-button">
+          <span class="tm-user-avatar" aria-hidden="true">U</span>
+          <span>用户资料</span>
+        </button>
+      </div>
+    </nav>
 
-    <section class="tm-dashboard-grid" aria-label="Production overview">
-      <article class="tm-metric-card">
-        <span>项目总数</span>
-        <strong>{{ projects.length }}</strong>
-      </article>
-      <article class="tm-metric-card">
-        <span>累计字数</span>
-        <strong>{{ totalWordCount.toLocaleString() }}</strong>
-      </article>
-      <article class="tm-metric-card">
-        <span>文档数量</span>
-        <strong>{{ documentCount }}</strong>
-      </article>
-      <article class="tm-metric-card">
-        <span>平均进度</span>
-        <strong>{{ averageProgress }}%</strong>
-      </article>
-    </section>
+    <section class="tm-home-shell">
+      <section class="tm-hero-panel" aria-label="Text Master hero">
+        <div class="tm-hero-copy">
+          <p class="tm-runtime-badge">LOCAL WORKSPACE</p>
+          <h1>Text Master</h1>
+          <p class="tm-subtitle">独立文本生产工厂</p>
+          <p class="tm-intro">
+            将观点、资料、大纲、正文、改写、审核和导出串联成可追溯、可回溯、可协作的完整文本生产流程。
+          </p>
 
-    <section class="tm-content-grid">
-      <article class="tm-panel tm-recent-panel">
-        <header class="tm-panel-header">
-          <div>
-            <p>Recent Projects</p>
-            <h2>最近项目预览</h2>
-          </div>
-          <RouterLink :to="textMasterRoutePaths.projectCenter">
-            查看全部
-          </RouterLink>
-        </header>
-
-        <p v-if="loadError" class="tm-error">{{ loadError }}</p>
-        <div v-else class="tm-recent-list">
-          <RouterLink
-            v-for="project in recentProjects"
-            :key="project.id"
-            class="tm-recent-card"
-            :to="getTextMasterProjectPath(project.id)"
-          >
-            <div>
-              <span>{{ project.type }}</span>
-              <h3>{{ project.title }}</h3>
-              <p>{{ project.summary }}</p>
-            </div>
-            <footer>
-              <span>{{ formatUpdatedAt(project.updatedAt) }}</span>
-              <strong>{{ project.progress }}%</strong>
-            </footer>
-          </RouterLink>
-        </div>
-      </article>
-
-      <article class="tm-panel tm-today-panel">
-        <header class="tm-panel-header">
-          <div>
-            <p>Today</p>
-            <h2>今日生产状态</h2>
-          </div>
-        </header>
-        <div class="tm-production-stack">
-          <div>
-            <span>今日版本记录</span>
-            <strong>{{ todayVersionCount }}</strong>
-          </div>
-          <div>
-            <span>当前运行模式</span>
-            <strong>Local Mode</strong>
-          </div>
-          <div>
-            <span>下一步动作</span>
-            <RouterLink :to="textMasterRoutePaths.projectCreate">
-              创建文本项目
+          <div class="tm-action-row" aria-label="Text Master actions">
+            <RouterLink
+              class="tm-button tm-button-primary"
+              :to="textMasterRoutePaths.projectCreate"
+              data-testid="home-create-project-button"
+            >
+              新建文本项目
+            </RouterLink>
+            <RouterLink class="tm-button" :to="getTextMasterProjectPath('project-drama-demo')">
+              继续上次项目
+            </RouterLink>
+            <RouterLink class="tm-button" :to="textMasterRoutePaths.projectCreate">
+              导入文本
+            </RouterLink>
+            <RouterLink class="tm-button" :to="textMasterRoutePaths.templates">
+              模板中心
             </RouterLink>
           </div>
+
+          <article class="tm-suggestion-card">
+            <span>今日建议</span>
+            <strong>继续完成《便利店夜班》的分集大纲审核</strong>
+          </article>
         </div>
-      </article>
+
+        <aside class="tm-pipeline-card" aria-label="Text production pipeline">
+          <header>
+            <p>Pipeline</p>
+            <h2>文本生产链路</h2>
+          </header>
+          <ol>
+            <li v-for="(step, index) in pipelineSteps" :key="step.name">
+              <span>{{ index + 1 }}</span>
+              <strong>{{ step.name }}</strong>
+              <em>{{ step.status }}</em>
+            </li>
+          </ol>
+          <RouterLink class="tm-button tm-pipeline-button" :to="getTextMasterProjectPath('project-drama-demo')">
+            查看工作台
+          </RouterLink>
+        </aside>
+      </section>
+
+      <section class="tm-stats-grid" aria-label="Home production stats">
+        <article v-for="item in stats" :key="item.label" class="tm-metric-card">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+          <small>{{ item.note }}</small>
+        </article>
+      </section>
+
+      <section class="tm-home-lower-grid">
+        <article class="tm-panel tm-recent-panel">
+          <header class="tm-panel-header">
+            <div>
+              <p>Production Tasks</p>
+              <h2>最近项目</h2>
+            </div>
+            <RouterLink :to="textMasterRoutePaths.projectCenter">查看全部项目</RouterLink>
+          </header>
+
+          <div class="tm-project-list">
+            <article
+              v-for="project in recentProjects"
+              :key="project.title"
+              class="tm-project-card"
+            >
+              <div class="tm-project-main">
+                <span>{{ project.type }}</span>
+                <h3>{{ project.title }}</h3>
+                <p>当前步骤：{{ project.step }}</p>
+                <div class="tm-progress-track" aria-label="Project progress">
+                  <span :style="{ width: `${project.progress}%` }" />
+                </div>
+              </div>
+              <aside class="tm-project-side">
+                <strong>{{ project.progress }}%</strong>
+                <RouterLink :to="project.path">继续生产</RouterLink>
+                <RouterLink :to="project.path">查看版本</RouterLink>
+                <RouterLink :to="textMasterRoutePaths.exports">导出</RouterLink>
+              </aside>
+            </article>
+          </div>
+        </article>
+
+        <aside class="tm-home-side-stack">
+          <article class="tm-panel tm-tasks-card">
+            <header class="tm-panel-header compact">
+              <div>
+                <p>Today</p>
+                <h2>今日生产任务</h2>
+              </div>
+            </header>
+            <ul>
+              <li v-for="task in todayTasks" :key="task">{{ task }}</li>
+            </ul>
+            <RouterLink class="tm-button tm-button-primary" :to="getTextMasterProjectPath('project-copy-demo')">
+              开始处理
+            </RouterLink>
+          </article>
+
+          <article class="tm-panel tm-templates-card">
+            <header class="tm-panel-header compact">
+              <div>
+                <p>Templates</p>
+                <h2>快速模板</h2>
+              </div>
+              <RouterLink :to="textMasterRoutePaths.templates">查看全部模板</RouterLink>
+            </header>
+            <div class="tm-template-chip-grid">
+              <RouterLink
+                v-for="template in quickTemplates"
+                :key="template"
+                :to="textMasterRoutePaths.templates"
+              >
+                {{ template }}
+              </RouterLink>
+            </div>
+          </article>
+        </aside>
+      </section>
     </section>
   </main>
 </template>
@@ -203,35 +210,147 @@ function formatUpdatedAt(value: string): string {
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
-  background: #050506;
+  background:
+    linear-gradient(180deg, rgba(15, 15, 18, 0.72), rgba(5, 5, 6, 0.96)),
+    #050506;
   color: #f4f4f5;
-  padding: 32px;
+  padding: 20px;
 }
 
+.tm-home-topbar,
 .tm-hero-panel,
 .tm-panel,
-.tm-metric-card {
+.tm-metric-card,
+.tm-suggestion-card,
+.tm-pipeline-card {
   border: 1px solid rgba(161, 161, 170, 0.16);
-  background: rgba(24, 24, 27, 0.88);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  background: rgba(24, 24, 27, 0.9);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+
+.tm-home-topbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(360px, 1fr) minmax(420px, auto);
+  align-items: center;
+  gap: 16px;
+  max-width: 1240px;
+  min-height: 64px;
+  margin: 0 auto;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.tm-home-brand,
+.tm-home-nav-links,
+.tm-home-status,
+.tm-profile-button,
+.tm-button,
+.tm-panel-header a,
+.tm-project-side a,
+.tm-template-chip-grid a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tm-home-brand {
+  min-width: 0;
+  gap: 10px;
+  color: #f4f4f5;
+}
+
+.tm-brand-mark,
+.tm-user-avatar {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(129, 140, 248, 0.42);
+  background: #202235;
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tm-home-nav-links {
+  justify-content: center;
+  gap: 8px;
+}
+
+.tm-home-nav-links a,
+.tm-status-pill,
+.tm-profile-button {
+  min-height: 36px;
+  border: 1px solid rgba(148, 148, 160, 0.18);
+  border-radius: 6px;
+  background: #18181b;
+  color: #d4d4d8;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.tm-home-nav-links a.router-link-active,
+.tm-home-nav-links a:hover,
+.tm-profile-button:hover {
+  border-color: rgba(129, 140, 248, 0.44);
+  background: #202235;
+  color: #eef2ff;
+}
+
+.tm-home-status {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tm-status-pill {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.tm-status-pill.ready {
+  border-color: rgba(125, 211, 252, 0.32);
+  color: #bae6fd;
+}
+
+.tm-profile-button {
+  gap: 8px;
+  cursor: pointer;
+}
+
+.tm-user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.tm-home-shell {
+  display: grid;
+  max-width: 1240px;
+  margin: 18px auto 0;
+  gap: 18px;
 }
 
 .tm-hero-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
-  gap: 28px;
-  max-width: 1180px;
-  margin: 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 22px;
   border-radius: 8px;
-  padding: 34px;
+  padding: 28px;
+}
+
+.tm-hero-copy {
+  min-width: 0;
 }
 
 .tm-runtime-badge,
 .tm-panel-header p,
+.tm-pipeline-card header p,
 .tm-metric-card span,
-.tm-console-line span,
-.tm-production-stack span,
-.tm-recent-card span {
+.tm-suggestion-card span,
+.tm-project-card span {
   color: #a1a1aa;
   font-size: 12px;
   letter-spacing: 0;
@@ -240,7 +359,7 @@ function formatUpdatedAt(value: string): string {
 
 .tm-hero-copy h1 {
   margin: 12px 0 0;
-  font-size: 56px;
+  font-size: 60px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -252,34 +371,32 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-intro {
-  max-width: 680px;
+  max-width: 720px;
   margin: 18px 0 0;
   color: #c4c4c8;
   font-size: 15px;
-  line-height: 1.8;
+  line-height: 1.75;
 }
 
 .tm-action-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 30px;
+  gap: 10px;
+  margin-top: 26px;
 }
 
 .tm-button,
 .tm-panel-header a,
-.tm-production-stack a {
-  display: inline-flex;
+.tm-project-side a,
+.tm-template-chip-grid a {
   min-height: 40px;
-  align-items: center;
   justify-content: center;
   border: 1px solid rgba(212, 212, 216, 0.18);
   border-radius: 6px;
   background: #27272a;
   color: #f4f4f5;
-  padding: 0 16px;
-  text-decoration: none;
-  font-size: 14px;
+  padding: 0 14px;
+  font-size: 13px;
 }
 
 .tm-button-primary {
@@ -289,172 +406,293 @@ function formatUpdatedAt(value: string): string {
   font-weight: 700;
 }
 
-.tm-status-console {
-  border-radius: 8px;
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  background: #111113;
-  padding: 22px;
-}
-
-.tm-console-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid rgba(161, 161, 170, 0.12);
-  padding: 13px 0;
-}
-
-.tm-console-line:first-child {
-  padding-top: 0;
-}
-
-.tm-console-line strong {
-  color: #d4d4d8;
-  font-size: 13px;
-}
-
-.tm-status-console p {
-  margin: 18px 0 0;
-  color: #a1a1aa;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.tm-dashboard-grid,
-.tm-content-grid {
+.tm-suggestion-card {
   display: grid;
-  max-width: 1180px;
-  margin: 22px auto 0;
+  gap: 6px;
+  max-width: 560px;
+  margin-top: 24px;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.tm-suggestion-card strong {
+  color: #e4e4e7;
+  font-size: 15px;
+}
+
+.tm-pipeline-card {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  border-radius: 8px;
+  padding: 20px;
+  background: #101114;
+}
+
+.tm-pipeline-card h2,
+.tm-panel-header h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.tm-pipeline-card ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-pipeline-card li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-radius: 8px;
+  background: #18181b;
+  padding: 8px 10px;
+}
+
+.tm-pipeline-card li span {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: #272a3d;
+  color: #c7d2fe;
+  font-size: 12px;
+}
+
+.tm-pipeline-card li strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tm-pipeline-card li em {
+  color: #a5b4fc;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.tm-pipeline-button {
+  width: 100%;
+}
+
+.tm-stats-grid,
+.tm-home-lower-grid {
+  display: grid;
   gap: 18px;
 }
 
-.tm-dashboard-grid {
+.tm-stats-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.tm-content-grid {
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
 }
 
 .tm-metric-card,
 .tm-panel {
   border-radius: 8px;
-  padding: 20px;
+  padding: 18px;
 }
 
 .tm-metric-card strong {
   display: block;
-  margin-top: 12px;
-  font-size: 28px;
+  margin-top: 10px;
+  font-size: 30px;
   line-height: 1;
+}
+
+.tm-metric-card small {
+  display: block;
+  margin-top: 8px;
+  color: #a1a1aa;
+}
+
+.tm-home-lower-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
 }
 
 .tm-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 16px;
 }
 
-.tm-panel-header h2 {
-  margin: 4px 0 0;
-  font-size: 18px;
+.tm-panel-header.compact {
+  margin-bottom: 12px;
 }
 
-.tm-recent-list {
+.tm-panel-header a {
+  min-height: 34px;
+}
+
+.tm-project-list,
+.tm-home-side-stack,
+.tm-tasks-card ul,
+.tm-template-chip-grid {
   display: grid;
   gap: 12px;
 }
 
-.tm-recent-card {
+.tm-project-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(124px, auto);
   gap: 16px;
   border: 1px solid rgba(161, 161, 170, 0.14);
   border-radius: 8px;
   background: #18181b;
-  color: inherit;
   padding: 16px;
-  text-decoration: none;
 }
 
-.tm-recent-card h3 {
+.tm-project-main {
+  min-width: 0;
+}
+
+.tm-project-card h3 {
   margin: 6px 0 0;
-  font-size: 16px;
+  font-size: 18px;
 }
 
-.tm-recent-card p {
-  margin: 8px 0 0;
+.tm-project-card p {
+  margin: 10px 0 0;
   color: #a1a1aa;
   font-size: 13px;
-  line-height: 1.6;
 }
 
-.tm-recent-card footer {
+.tm-progress-track {
+  height: 7px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #27272a;
+}
+
+.tm-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #818cf8, #38bdf8);
+}
+
+.tm-project-side {
   display: grid;
-  align-content: space-between;
-  justify-items: end;
-  min-width: 86px;
+  align-content: start;
+  gap: 8px;
+  min-width: 124px;
 }
 
-.tm-recent-card footer strong {
-  font-size: 20px;
+.tm-project-side strong {
+  justify-self: end;
+  color: #c7d2fe;
+  font-size: 24px;
 }
 
-.tm-production-stack {
-  display: grid;
-  gap: 12px;
+.tm-project-side a {
+  min-height: 32px;
+  padding: 0 10px;
 }
 
-.tm-production-stack > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+.tm-tasks-card ul {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-tasks-card li {
   border-radius: 8px;
   background: #18181b;
-  padding: 16px;
+  color: #d4d4d8;
+  padding: 12px;
+  font-size: 13px;
 }
 
-.tm-production-stack strong {
-  font-size: 20px;
+.tm-tasks-card .tm-button {
+  width: 100%;
 }
 
-.tm-error {
-  color: #fca5a5;
+.tm-template-chip-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 900px) {
-  .tm-home-page {
-    padding: 18px;
+.tm-template-chip-grid a {
+  min-height: 44px;
+  padding: 0 10px;
+  text-align: center;
+}
+
+@media (max-width: 1120px) {
+  .tm-home-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .tm-home-nav-links,
+  .tm-home-status {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .tm-hero-panel,
-  .tm-content-grid {
+  .tm-home-lower-grid {
     grid-template-columns: 1fr;
-  }
-
-  .tm-dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .tm-hero-copy h1 {
-    font-size: 42px;
   }
 }
 
-@media (max-width: 560px) {
-  .tm-dashboard-grid {
+@media (max-width: 760px) {
+  .tm-home-page {
+    padding: 14px;
+  }
+
+  .tm-hero-panel {
+    padding: 20px;
+  }
+
+  .tm-hero-copy h1 {
+    font-size: 44px;
+  }
+
+  .tm-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tm-project-card {
     grid-template-columns: 1fr;
   }
 
-  .tm-recent-card {
+  .tm-project-side {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tm-project-side strong {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .tm-stats-grid,
+  .tm-template-chip-grid,
+  .tm-project-side {
     grid-template-columns: 1fr;
   }
 
-  .tm-recent-card footer {
-    justify-items: start;
+  .tm-action-row,
+  .tm-home-nav-links,
+  .tm-home-status {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .tm-button,
+  .tm-home-nav-links a,
+  .tm-profile-button,
+  .tm-status-pill {
+    width: 100%;
   }
 }
 </style>
