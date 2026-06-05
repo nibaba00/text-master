@@ -84,7 +84,7 @@ export type RewriteTextInput = {
 
 export type TextGenerationResult = {
   text: string;
-  provider: 'mock' | 'brain-hub';
+  provider: 'mock' | 'deepseek' | 'openai' | 'local-model' | 'brain-hub';
   createdAt: string;
   job?: GenerationJob;
   candidate?: GenerationCandidate;
@@ -93,7 +93,7 @@ export type TextGenerationResult = {
 export type TextReviewResult = {
   summary: string;
   issues: string[];
-  provider: 'mock' | 'brain-hub';
+  provider: 'mock' | 'deepseek' | 'openai' | 'local-model' | 'brain-hub';
   createdAt: string;
   job?: GenerationJob;
   candidate?: GenerationCandidate;

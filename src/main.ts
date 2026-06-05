@@ -6,7 +6,12 @@ import {
 } from 'vue-router';
 import App from './App.vue';
 import { textMasterRoutes } from './modules/text-master/routes';
+import { setStorageDriver } from './modules/text-master/services/storage/storageDriver';
+import { createLocalStorageDriver } from './modules/text-master/services/storage/localStorageDriver';
 import './modules/text-master/styles/theme.css';
+
+// 初始化默认 StorageDriver
+setStorageDriver(createLocalStorageDriver());
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

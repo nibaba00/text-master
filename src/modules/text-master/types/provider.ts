@@ -26,6 +26,26 @@ export type TextModelProvider = {
   run: (request: TextModelProviderRequest) => Promise<TextModelProviderResult>;
 };
 
+export type ProviderId = 'mock' | 'deepseek' | 'openai' | 'local-model' | 'brain-hub';
+
+export type ProviderConfig = {
+  activeProvider: ProviderId;
+  deepseek: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+  };
+};
+
+export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
+  activeProvider: 'mock',
+  deepseek: {
+    apiKey: '',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+  },
+};
+
 export type AiPipelineResult = {
   job: GenerationJob;
   candidate: GenerationCandidate;

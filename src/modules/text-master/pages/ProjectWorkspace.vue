@@ -1273,6 +1273,7 @@ function downloadExportFile(
     'text-master-json': 'application/json;charset=utf-8',
     'media-master-json': 'application/json;charset=utf-8',
     'novel-master-json': 'application/json;charset=utf-8',
+    'project-package-json': 'application/json;charset=utf-8',
   };
   const blob = new Blob([content], { type: mimeTypes[format] });
   const url = URL.createObjectURL(blob);

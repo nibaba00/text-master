@@ -24,3 +24,11 @@ export * from './services/candidateService';
 export * from './services/reviewService';
 export * from './services/exportService';
 export * from './services/modelProviderService';
+export {
+  exportAllLocalData,
+  importAllLocalData,
+  resetLocalData,
+} from './services/localStorageRepository';
+export { setStorageDriver, getStorageDriver } from './services/storage/storageDriver';
+export type { StorageDriver } from './services/storage/storageDriver';
+export { createLocalStorageDriver } from './services/storage/localStorageDriver';

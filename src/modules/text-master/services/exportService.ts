@@ -69,45 +69,122 @@ export async function renderExportContent(request: ExportRequest): Promise<strin
     throw new Error(`Project not found: ${request.projectId}`);
   }
 
-  const payload = {
-    sourceApp: 'text-master',
-    project,
-    settings: project.settings,
-    materials,
-    documents,
-    versions: versions.map((version) => ({
-      id: version.id,
-      documentId: version.documentId,
-      operation: version.operation,
-      model: version.model,
-      createdAt: version.createdAt,
-      createdBy: version.createdBy,
-    })),
-    reviewIssues,
-    exportMeta: {
-      format: request.format,
-      fileName: request.fileName,
-      contentScope: request.contentScope ?? ['project', 'documents', 'versions'],
-      createdAt: new Date().toISOString(),
-    },
+  const versionSummaries = versions.map((version) => ({
+    id: version.id,
+    documentId: version.documentId,
+    operation: version.operation,
+    model: version.model,
+    createdAt: version.createdAt,
+    createdBy: version.createdBy,
+  }));
+
+  const exportMeta = {
+    format: request.format,
+    fileName: request.fileName,
+    contentScope: request.contentScope ?? ['project', 'documents', 'versions'],
+    createdAt: new Date().toISOString(),
   };
 
-  if (
-    request.format === 'json' ||
-    request.format === 'text-master-json' ||
-    request.format === 'media-master-json' ||
-    request.format === 'novel-master-json'
-  ) {
-    const crossAppPayload =
-      request.format === 'media-master-json'
-        ? { ...payload, targetApp: 'media-master', mediaPlan: { scenes: [], assets: [] } }
-        : request.format === 'novel-master-json'
-          ? { ...payload, targetApp: 'novel-master', novelPlan: { chapters: [], arcs: [] } }
-          : payload;
-
-    return JSON.stringify(crossAppPayload, null, 2);
+  // --- Project Package JSON ---
+  if (request.format === 'project-package-json') {
+    const exportRecords = await listExportRecords(request.projectId);
+    return JSON.stringify(
+      {
+        sourceApp: 'text-master',
+        project,
+        settings: project.settings,
+        materials,
+        documents,
+        versions: versionSummaries,
+        reviewIssues,
+        exportRecords,
+        exportMeta,
+      },
+      null,
+      2,
+    );
   }
 
+  // --- Media Master JSON ---
+  if (request.format === 'media-master-json') {
+    const briefDoc = documents.find((d) => d.type === 'brief');
+    const outlineDoc = documents.find((d) => d.type === 'outline');
+    const characterMaterials = materials.filter(
+      (m) => m.type === 'character' || (m.title && m.title.includes('角色')),
+    );
+    const worldMaterials = materials.filter(
+      (m) => m.type === 'worldbuilding' || (m.title && m.title.includes('世界观')),
+    );
+
+    return JSON.stringify(
+      {
+        sourceApp: 'text-master',
+        projectTitle: project.title,
+        storyBrief: briefDoc?.content ?? project.summary ?? '',
+        characters: characterMaterials.map((m) => ({ name: m.title, description: m.content })),
+        worldbuilding: worldMaterials.map((m) => ({ aspect: m.title, detail: m.content })),
+        episodeOutlines: outlineDoc?.content ?? '',
+        scenes: documents
+          .filter((d) => d.type === 'episode' || d.type === 'chapter')
+          .map((d) => ({ title: d.title, content: d.content })),
+        dialogues: [],
+        narratorText: '',
+        exportMeta,
+      },
+      null,
+      2,
+    );
+  }
+
+  // --- Novel Master JSON ---
+  if (request.format === 'novel-master-json') {
+    const briefDoc = documents.find((d) => d.type === 'brief');
+    const outlineDoc = documents.find((d) => d.type === 'outline');
+    const characterMaterials = materials.filter(
+      (m) => m.type === 'character' || (m.title && m.title.includes('角色')),
+    );
+    const worldMaterials = materials.filter(
+      (m) => m.type === 'worldbuilding' || (m.title && m.title.includes('世界观')),
+    );
+    const chapterDocs = documents.filter((d) => d.type === 'chapter');
+    const foreshadowingMaterials = materials.filter(
+      (m) => m.title && m.title.includes('伏笔'),
+    );
+
+    return JSON.stringify(
+      {
+        sourceApp: 'text-master',
+        projectTitle: project.title,
+        novelSettings: project.settings,
+        worldbuilding: worldMaterials.map((m) => ({ aspect: m.title, detail: m.content })),
+        characters: characterMaterials.map((m) => ({ name: m.title, description: m.content })),
+        volumeOutline: outlineDoc?.content ?? '',
+        chapterOutlines: chapterDocs.map((d) => ({ title: d.title, outline: '' })),
+        chapterDrafts: chapterDocs.map((d) => ({ title: d.title, content: d.content })),
+        foreshadowingNotes: foreshadowingMaterials.map((m) => ({ note: m.title, detail: m.content })),
+        exportMeta,
+      },
+      null,
+      2,
+    );
+  }
+
+  // --- Standard JSON / Text Master JSON ---
+  if (request.format === 'json' || request.format === 'text-master-json') {
+    const payload = {
+      sourceApp: 'text-master',
+      project,
+      settings: project.settings,
+      materials,
+      documents,
+      versions: versionSummaries,
+      reviewIssues,
+      exportMeta,
+    };
+    return JSON.stringify(payload, null, 2);
+  }
+
+  // --- Markdown / TXT ---
   const markdown = [
     `# ${project.title}`,
     '',

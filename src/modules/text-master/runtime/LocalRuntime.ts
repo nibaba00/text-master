@@ -7,12 +7,8 @@ import { listDocuments, saveDocument } from '../services/documentService';
 import { listMaterials } from '../services/materialService';
 import { createVersion, listVersions } from '../services/versionService';
 import { createCandidate, listCandidates } from '../services/candidateService';
-import {
-  generateDocument,
-  reviewDocument,
-  rewriteText,
-} from '../services/generationService';
 import { createJob, listJobs, updateJob } from '../services/jobService';
+import { getActiveProvider } from '../services/modelProviderService';
 import { createReviewIssue, listReviewIssues } from '../services/reviewService';
 import { exportProject } from '../services/exportService';
 import type {
@@ -140,9 +136,26 @@ export function createLocalRuntime(
         },
       });
       await updateJob(job.id, { status: 'running' });
-      const text = await generateDocument(
-        [input.context, input.prompt].filter(Boolean).join('\n\n'),
-      );
+
+      const provider = getActiveProvider();
+      let text: string;
+      try {
+        const result = await provider.run({
+          projectId: input.projectId,
+          documentId: input.documentId,
+          type: job.type,
+          prompt: input.prompt,
+          context: input.context,
+        });
+        text = result.content;
+      } catch (providerError) {
+        await updateJob(job.id, {
+          status: 'failed',
+          error: providerError instanceof Error ? providerError.message : 'Provider 调用失败',
+        });
+        throw providerError;
+      }
+
       const candidate = await createCandidate({
         projectId: input.projectId,
         documentId: input.documentId,
@@ -150,7 +163,7 @@ export function createLocalRuntime(
         type: job.type,
         title: job.type === 'outline' ? '大纲候选结果' : '正文候选结果',
         content: text,
-        provider: 'mock',
+        provider: provider.id,
       });
       const completedJob = await updateJob(job.id, {
         status: 'succeeded',
@@ -162,7 +175,7 @@ export function createLocalRuntime(
 
       return {
         text,
-        provider: 'mock',
+        provider: provider.id,
         createdAt: new Date().toISOString(),
         job: completedJob,
         candidate,
@@ -181,7 +194,26 @@ export function createLocalRuntime(
         },
       });
       await updateJob(job.id, { status: 'running' });
-      const summary = await reviewDocument(input.text);
+
+      const provider = getActiveProvider();
+      let summary: string;
+      try {
+        const result = await provider.run({
+          projectId: input.projectId,
+          documentId: input.documentId,
+          type: 'review',
+          prompt: input.text,
+          context: '',
+        });
+        summary = result.content;
+      } catch (providerError) {
+        await updateJob(job.id, {
+          status: 'failed',
+          error: providerError instanceof Error ? providerError.message : 'Provider 调用失败',
+        });
+        throw providerError;
+      }
+
       const candidate = await createCandidate({
         projectId: input.projectId,
         documentId: input.documentId,
@@ -189,7 +221,7 @@ export function createLocalRuntime(
         type: 'review',
         title: '审核报告候选',
         content: summary,
-        provider: 'mock',
+        provider: provider.id,
       });
       const reviewIssues = await Promise.all([
         createReviewIssue({
@@ -226,7 +258,7 @@ export function createLocalRuntime(
       return {
         summary,
         issues: reviewIssues.map((issue) => issue.problem),
-        provider: 'mock',
+        provider: provider.id,
         createdAt: new Date().toISOString(),
         job: completedJob,
         candidate,
@@ -247,9 +279,26 @@ export function createLocalRuntime(
         },
       });
       await updateJob(job.id, { status: 'running' });
-      const text = await rewriteText(
-        [input.instruction, input.text].filter(Boolean).join('\n\n'),
-      );
+
+      const provider = getActiveProvider();
+      let text: string;
+      try {
+        const result = await provider.run({
+          projectId: input.projectId,
+          documentId: input.documentId,
+          type: 'rewrite',
+          prompt: input.text,
+          context: input.instruction ?? '',
+        });
+        text = result.content;
+      } catch (providerError) {
+        await updateJob(job.id, {
+          status: 'failed',
+          error: providerError instanceof Error ? providerError.message : 'Provider 调用失败',
+        });
+        throw providerError;
+      }
+
       const candidate = await createCandidate({
         projectId: input.projectId,
         documentId: input.documentId,
@@ -257,7 +306,7 @@ export function createLocalRuntime(
         type: 'rewrite',
         title: '改写候选结果',
         content: text,
-        provider: 'mock',
+        provider: provider.id,
       });
       const completedJob = await updateJob(job.id, {
         status: 'succeeded',
@@ -269,7 +318,7 @@ export function createLocalRuntime(
 
       return {
         text,
-        provider: 'mock',
+        provider: provider.id,
         createdAt: new Date().toISOString(),
         job: completedJob,
         candidate,

@@ -1,4 +1,6 @@
-const memoryStorage = new Map<string, string>();
+import { getStorageDriver } from './storage/storageDriver';
+
+const TEXT_MASTER_NAMESPACE = 'text-master:';
 
 export class TextMasterServiceError extends Error {
   readonly service: string;
@@ -25,7 +27,6 @@ export async function runServiceAction<T>(
     if (error instanceof TextMasterServiceError) {
       throw error;
     }
-
     throw new TextMasterServiceError(service, operation, error);
   }
 }
@@ -36,10 +37,10 @@ export function readCollection<T>(
   service: string,
 ): T[] {
   try {
-    const rawValue = getStoredValue(key);
+    const rawValue = getStorageDriver().getItem(key);
 
     if (rawValue === null) {
-      writeStoredValue(key, JSON.stringify(initialValue));
+      getStorageDriver().setItem(key, JSON.stringify(initialValue));
       return cloneValue(initialValue);
     }
 
@@ -61,7 +62,7 @@ export function writeCollection<T>(
   service: string,
 ): void {
   try {
-    writeStoredValue(key, JSON.stringify(value));
+    getStorageDriver().setItem(key, JSON.stringify(value));
   } catch (error) {
     throw new TextMasterServiceError(service, 'writeCollection', error);
   }
@@ -76,32 +77,23 @@ export function replaceCollection<T>(
 }
 
 export function removeStoredCollection(key: string): void {
-  const storage = getLocalStorage();
-
-  if (storage) {
-    storage.removeItem(key);
-    return;
-  }
-
-  memoryStorage.delete(key);
+  getStorageDriver().removeItem(key);
 }
 
 export function createTextMasterId(prefix: string): string {
   const randomPart = Math.random().toString(36).slice(2, 8);
-
   return `${prefix}-${Date.now()}-${randomPart}`;
 }
 
 export function countTextWords(content: string): number {
   const trimmedContent = content.trim();
 
-  if (!trimmedContent) {
-    return 0;
-  }
+  if (!trimmedContent) return 0;
 
   const cjkMatches = trimmedContent.match(/[\u4e00-\u9fff]/g) ?? [];
   const latinSource = trimmedContent.replace(/[\u4e00-\u9fff]/g, ' ');
-  const latinMatches = latinSource.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g) ?? [];
+  const latinMatches =
+    latinSource.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g) ?? [];
 
   return cjkMatches.length + latinMatches.length;
 }
@@ -110,35 +102,21 @@ export function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function getStoredValue(key: string): string | null {
-  const storage = getLocalStorage();
+// --- 数据备份 ---
 
-  if (storage) {
-    return storage.getItem(key);
-  }
-
-  return memoryStorage.get(key) ?? null;
+export function exportAllLocalData(): Record<string, string> {
+  return getStorageDriver().exportAll(TEXT_MASTER_NAMESPACE);
 }
 
-function writeStoredValue(key: string, value: string): void {
-  const storage = getLocalStorage();
-
-  if (storage) {
-    storage.setItem(key, value);
-    return;
-  }
-
-  memoryStorage.set(key, value);
-}
-
-function getLocalStorage(): Storage | null {
-  try {
-    if (typeof window === 'undefined') {
-      return null;
+export function importAllLocalData(data: Record<string, string>): void {
+  // 只导入 text-master: 前缀的数据
+  for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith(TEXT_MASTER_NAMESPACE)) {
+      getStorageDriver().setItem(key, value);
     }
-
-    return window.localStorage ?? null;
-  } catch {
-    return null;
   }
+}
+
+export function resetLocalData(): void {
+  getStorageDriver().clearNamespace(TEXT_MASTER_NAMESPACE);
 }

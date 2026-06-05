@@ -4,7 +4,8 @@ export type ExportFormat =
   | 'json'
   | 'text-master-json'
   | 'media-master-json'
-  | 'novel-master-json';
+  | 'novel-master-json'
+  | 'project-package-json';
 
 export type ExportRequest = {
   projectId: string;

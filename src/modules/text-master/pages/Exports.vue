@@ -4,7 +4,16 @@ import TopNav from '../components/TopNav.vue';
 import { createTextMasterRuntime } from '../runtime/TextMasterRuntime';
 import type { ExportFormat as RuntimeExportFormat } from '../types/export';
 
-type ExportFormat = 'markdown' | 'txt' | 'json' | 'docx' | 'pdf';
+type ExportFormat =
+  | 'markdown'
+  | 'txt'
+  | 'json'
+  | 'text-master-json'
+  | 'project-package-json'
+  | 'media-master-json'
+  | 'novel-master-json'
+  | 'docx'
+  | 'pdf';
 
 const selectedFormat = ref<ExportFormat>('markdown');
 const exportStatus = ref('导出中心待命，确认前只生成预览。');
@@ -22,6 +31,10 @@ const formatOptions: Array<{
   { value: 'markdown', label: 'Markdown', status: 'ready', description: '适合交付与版本留档' },
   { value: 'txt', label: 'TXT', status: 'ready', description: '适合纯文本审阅' },
   { value: 'json', label: 'JSON', status: 'ready', description: '适合结构化备份' },
+  { value: 'text-master-json', label: 'Text Master JSON', status: 'ready', description: '完整项目数据 JSON' },
+  { value: 'project-package-json', label: '项目包 JSON', status: 'ready', description: '含导出记录的项目包' },
+  { value: 'media-master-json', label: 'Media Master JSON', status: 'ready', description: '媒体链路结构 JSON' },
+  { value: 'novel-master-json', label: 'Novel Master JSON', status: 'ready', description: '小说链路结构 JSON' },
   { value: 'docx', label: 'DOCX', status: 'later', description: '后续接入' },
   { value: 'pdf', label: 'PDF', status: 'later', description: '后续接入' },
 ];
@@ -39,7 +52,18 @@ function selectFormat(format: ExportFormat): void {
 }
 
 const exportFileName = computed(() => {
-  const extension = selectedFormat.value === 'markdown' ? 'md' : selectedFormat.value;
+  const extMap: Record<ExportFormat, string> = {
+    markdown: 'md',
+    txt: 'txt',
+    json: 'json',
+    'text-master-json': 'json',
+    'project-package-json': 'json',
+    'media-master-json': 'json',
+    'novel-master-json': 'json',
+    docx: 'docx',
+    pdf: 'pdf',
+  };
+  const extension = extMap[selectedFormat.value] ?? selectedFormat.value;
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
 
   return `TextMaster_export_${stamp}.${extension}`;
@@ -89,6 +113,10 @@ function downloadExportFile(
     markdown: 'text/markdown;charset=utf-8',
     txt: 'text/plain;charset=utf-8',
     json: 'application/json;charset=utf-8',
+    'text-master-json': 'application/json;charset=utf-8',
+    'project-package-json': 'application/json;charset=utf-8',
+    'media-master-json': 'application/json;charset=utf-8',
+    'novel-master-json': 'application/json;charset=utf-8',
   };
   const blob = new Blob([content], { type: mimeTypes[format] });
   const url = URL.createObjectURL(blob);
