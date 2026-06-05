@@ -14,55 +14,63 @@ defineEmits<{
 }>();
 
 function formatRuntimeMode(mode: RuntimeMode): string {
-  return mode === 'brain-hub' ? 'Brain Hub Mode' : 'Local Mode';
+  return mode === 'brain-hub' ? 'Brain Hub 可选同步' : '本地独立运行';
+}
+
+function formatProjectStatus(status: TextProjectStatus | 'unknown'): string {
+  const labels: Record<TextProjectStatus, string> = {
+    draft: '草稿',
+    in_progress: '生产中',
+    reviewing: '审核中',
+    completed: '已完成',
+    exported: '已导出',
+    archived: '已归档',
+  };
+
+  return status === 'unknown' ? '未知状态' : labels[status];
 }
 </script>
 
 <template>
-  <aside class="tm-ai-action-panel">
+  <aside class="tm-ai-action-panel" data-testid="text-master-ai-panel">
     <header>
       <p>AI Copilot</p>
-      <h2>Mock Text v0</h2>
+      <h2>AI Copilot</h2>
+      <strong>Mock Text v0</strong>
+      <small>Brain Hub 仅作为可选同步入口，不是运行依赖。</small>
     </header>
 
     <section class="tm-ai-status" aria-label="Workspace AI status">
+      <div class="tm-ai-progress">
+        <span>当前项目进度</span>
+        <strong>{{ progress }}%</strong>
+        <meter min="0" max="100" :value="progress" />
+      </div>
       <div>
         <span>当前项目状态</span>
-        <strong>{{ projectStatus }}</strong>
+        <strong>{{ formatProjectStatus(projectStatus) }}</strong>
       </div>
       <div>
-        <span>生产进度</span>
-        <strong>{{ progress }}%</strong>
-      </div>
-      <div>
-        <span>运行模式</span>
+        <span>Brain Hub</span>
         <strong>{{ formatRuntimeMode(runtimeMode) }}</strong>
       </div>
-      <label>
-        模型选择
-        <select>
-          <option>Mock Text v0</option>
-        </select>
-      </label>
     </section>
 
     <section class="tm-ai-actions" aria-label="AI actions">
-      <button type="button" @click="$emit('action', 'generate')">
-        生成
-      </button>
-      <button type="button" @click="$emit('action', 'rewrite')">
-        改写
+      <h3>高频操作</h3>
+      <button class="primary" type="button" @click="$emit('action', 'generate')">
+        继续生产
       </button>
       <button type="button" @click="$emit('action', 'review')">
-        审核
+        运行项目审核
       </button>
       <button type="button" @click="$emit('action', 'export')">
-        导出
+        导出当前版本
       </button>
     </section>
 
     <section class="tm-task-queue" aria-label="Mock task queue">
-      <h3>任务队列 Mock</h3>
+      <h3>任务队列</h3>
       <ol>
         <li>
           <span>等待输入</span>
@@ -79,30 +87,37 @@ function formatRuntimeMode(mode: RuntimeMode): string {
       </ol>
     </section>
 
-    <button class="tm-version-entry" type="button" @click="$emit('openVersions')">
-      进入版本记录
-    </button>
+    <section class="tm-ai-secondary" aria-label="Lower frequency actions">
+      <button type="button" @click="$emit('action', 'rewrite')">改写正文</button>
+      <button type="button" @click="$emit('openVersions')">进入版本记录</button>
+    </section>
   </aside>
 </template>
 
 <style scoped>
 .tm-ai-action-panel {
-  width: 300px;
-  min-width: 300px;
+  width: var(--tm-ai-panel-width);
+  min-width: var(--tm-ai-panel-width);
   min-height: 0;
   height: 100%;
   overflow-y: auto;
-  border-left: 1px solid rgba(161, 161, 170, 0.14);
-  background: #0f0f12;
-  color: #f4f4f5;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--tm-panel);
+  background-color: var(--tm-panel-solid);
+  color: var(--tm-text);
+  box-shadow: var(--tm-shadow-card);
   padding: 16px;
 }
 
 header p,
+header strong,
 .tm-ai-status span,
 .tm-task-queue span,
-.tm-ai-status label {
-  color: #a1a1aa;
+header small {
+  color: var(--tm-text-muted);
   font-size: 12px;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -110,77 +125,107 @@ header p,
 
 header h2 {
   margin: 6px 0 0;
-  color: #c7d2fe;
-  font-size: 20px;
+  color: var(--tm-text);
+  font-size: 22px;
+}
+
+header strong {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  margin-top: 10px;
+  border: 1px solid rgba(48, 103, 255, 0.35);
+  border-radius: var(--tm-radius-pill);
+  background: rgba(48, 103, 255, 0.12);
+  color: #93B4FF;
+  padding: 5px 10px;
+  text-transform: none;
+}
+
+header small {
+  display: block;
+  margin-top: 8px;
+  text-transform: none;
+  line-height: 1.5;
 }
 
 .tm-ai-status,
 .tm-ai-actions,
+.tm-ai-secondary,
 .tm-task-queue ol {
   display: grid;
   gap: 10px;
 }
 
 .tm-ai-status {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .tm-ai-status > div,
 .tm-task-queue li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: 12px;
-  border-radius: 8px;
-  background: #18181b;
-  padding: 12px;
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 10px 12px;
+}
+
+.tm-ai-status > div:not(.tm-ai-progress),
+.tm-task-queue li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .tm-ai-status strong,
 .tm-task-queue strong {
-  color: #e4e4e7;
+  color: var(--tm-text-soft);
   font-size: 13px;
 }
 
-.tm-ai-status label {
-  display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  background: #18181b;
-  padding: 12px;
-}
-
-.tm-ai-status select {
+.tm-ai-progress meter {
   width: 100%;
-  border: 1px solid rgba(161, 161, 170, 0.18);
-  border-radius: 6px;
-  background: #09090b;
-  color: #f4f4f5;
-  padding: 10px;
 }
 
 .tm-ai-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 18px;
+  margin-top: 14px;
+}
+
+.tm-ai-actions h3 {
+  margin: 0 0 2px;
+  font-size: 17px;
 }
 
 .tm-ai-actions button,
-.tm-version-entry {
-  min-height: 40px;
-  border: 1px solid rgba(148, 148, 160, 0.22);
-  border-radius: 6px;
-  background: #27272a;
-  color: #f4f4f5;
+.tm-ai-secondary button {
+  min-height: var(--tm-button-height);
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-control-bg-hover);
+  color: var(--tm-text);
+  font-weight: 700;
 }
 
-.tm-ai-actions button:first-child {
-  border-color: rgba(129, 140, 248, 0.54);
-  background: #1f2130;
-  color: #eef2ff;
+.tm-ai-actions button.primary {
+  border-color: rgba(139, 140, 255, 0.54);
+  background: var(--tm-accent-gradient);
+  color: white;
+}
+
+.tm-ai-actions button:nth-of-type(2) {
+  border-color: rgba(139, 140, 255, 0.38);
+  background: rgba(119, 117, 255, 0.14);
+  color: #dce3ff;
+}
+
+.tm-ai-actions button:nth-of-type(3) {
+  border-color: rgba(72, 213, 138, 0.3);
+  background: rgba(72, 213, 138, 0.12);
+  color: #c8f8dc;
 }
 
 .tm-task-queue {
-  margin-top: 22px;
+  margin-top: 18px;
 }
 
 .tm-task-queue h3 {
@@ -194,9 +239,15 @@ header h2 {
   list-style: none;
 }
 
-.tm-version-entry {
-  width: 100%;
-  margin-top: 18px;
+.tm-ai-secondary {
+  margin-top: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tm-ai-secondary button {
+  min-height: 38px;
+  color: var(--tm-text-muted);
+  font-size: 12px;
 }
 
 @media (max-width: 980px) {
@@ -204,8 +255,8 @@ header h2 {
     width: 100%;
     min-width: 0;
     max-height: none;
-    border-left: 0;
-    border-top: 1px solid rgba(161, 161, 170, 0.14);
+    border-left: 1px solid var(--tm-border);
+    border-top: 1px solid var(--tm-border);
   }
 }
 </style>

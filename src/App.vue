@@ -12,8 +12,8 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #050506;
-  color: #f4f4f5;
+  background: var(--tm-bg);
+  color: var(--tm-text);
 }
 
 * {
@@ -30,7 +30,7 @@ body,
 body {
   min-width: 320px;
   overflow-x: hidden;
-  background: #050506;
+  background: var(--tm-bg);
 }
 
 button,

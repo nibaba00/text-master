@@ -6,6 +6,7 @@ import ProjectCreate from './pages/ProjectCreate.vue';
 import ProjectWorkspace from './pages/ProjectWorkspace.vue';
 import Settings from './pages/Settings.vue';
 import Templates from './pages/Templates.vue';
+import UserProfile from './pages/UserProfile.vue';
 
 export type TextMasterRouteName =
   | 'text-master-home'
@@ -14,7 +15,8 @@ export type TextMasterRouteName =
   | 'text-master-project-workspace'
   | 'text-master-templates'
   | 'text-master-exports'
-  | 'text-master-settings';
+  | 'text-master-settings'
+  | 'text-master-user-profile';
 
 export type TextMasterRouteRecord = {
   path: string;
@@ -34,6 +36,7 @@ export const textMasterRoutePaths = {
   templates: '/templates',
   exports: '/exports',
   settings: '/settings',
+  profile: '/profile',
 } as const;
 
 export const textMasterNavigation = [
@@ -129,6 +132,15 @@ export const textMasterRoutes: TextMasterRouteRecord[] = [
     meta: {
       appId: 'text-master',
       title: 'Settings',
+    },
+  },
+  {
+    path: textMasterRoutePaths.profile,
+    name: 'text-master-user-profile',
+    component: UserProfile,
+    meta: {
+      appId: 'text-master',
+      title: 'User Profile',
     },
   },
 ];

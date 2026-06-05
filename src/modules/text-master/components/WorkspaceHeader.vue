@@ -1,5 +1,6 @@
 <script setup lang="ts">
 defineProps<{
+  projectPath?: string;
   projectTitle: string;
   autoSaveEnabled: boolean;
   updatedAt?: string;
@@ -8,9 +9,8 @@ defineProps<{
 
 <template>
   <header class="tm-workspace-header">
-    <div class="tm-header-brand">
-      <strong>Text Master</strong>
-      <span>/</span>
+    <div class="tm-header-title">
+      <small>{{ projectPath || '项目中心 / 当前项目' }}</small>
       <h1>{{ projectTitle || '未命名项目' }}</h1>
     </div>
 
@@ -24,37 +24,44 @@ defineProps<{
 <style scoped>
 .tm-workspace-header {
   display: flex;
-  min-height: 64px;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid rgba(161, 161, 170, 0.14);
-  background: #09090b;
-  color: #f4f4f5;
-  padding: 0 18px;
+  width: min(100%, var(--tm-page-max-width));
+  margin: 0 auto;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--tm-panel);
+  background-color: var(--tm-panel-solid);
+  color: var(--tm-text);
+  box-shadow: var(--tm-shadow-card);
+  padding: 8px 16px;
 }
 
-.tm-header-brand {
-  display: flex;
+.tm-header-title {
+  display: grid;
   min-width: 0;
-  align-items: center;
-  gap: 10px;
+  gap: 2px;
 }
 
-.tm-header-brand strong {
-  white-space: nowrap;
-  font-size: 14px;
+.tm-header-title small {
+  color: var(--tm-text-weak);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.tm-header-brand span,
 .tm-header-status small {
-  color: #71717a;
+  color: var(--tm-text-weak);
 }
 
-.tm-header-brand h1 {
+.tm-header-title h1 {
   overflow: hidden;
   margin: 0;
-  color: #e4e4e7;
+  color: var(--tm-text-soft);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
@@ -70,10 +77,10 @@ defineProps<{
 }
 
 .tm-header-status span {
-  border: 1px solid rgba(129, 140, 248, 0.36);
+  border: 1px solid rgba(139, 140, 255, 0.36);
   border-radius: 999px;
-  background: #1f2130;
-  color: #c7d2fe;
+  background: rgba(119, 117, 255, 0.14);
+  color: #dce3ff;
   padding: 6px 10px;
   font-size: 12px;
 }
@@ -83,7 +90,7 @@ defineProps<{
     align-items: flex-start;
     flex-direction: column;
     justify-content: center;
-    min-height: 86px;
+    min-height: 84px;
     padding: 12px 16px;
   }
 

@@ -6,6 +6,7 @@ import {
 } from 'vue-router';
 import App from './App.vue';
 import { textMasterRoutes } from './modules/text-master/routes';
+import './modules/text-master/styles/theme.css';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

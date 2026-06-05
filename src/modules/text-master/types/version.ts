@@ -4,7 +4,8 @@ export type TextVersionOperation =
   | 'review'
   | 'repair'
   | 'manual_edit'
-  | 'export';
+  | 'export'
+  | 'restore';
 
 export type TextVersion = {
   id: string;

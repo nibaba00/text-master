@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import TopNav from '../components/TopNav.vue';
 import {
   getTextMasterProjectPath,
   textMasterRoutePaths,
@@ -90,6 +91,8 @@ function formatUpdatedAt(value: string): string {
 
 <template>
   <main class="tm-project-center-page">
+    <TopNav />
+
     <header class="tm-center-header">
       <div>
         <p>Local Project Center</p>
@@ -228,12 +231,12 @@ function formatUpdatedAt(value: string): string {
 
 <style scoped>
 .tm-project-center-page {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
-  overflow-x: hidden;
-  background: #050506;
-  color: #f4f4f5;
-  padding: 28px;
+  overflow: hidden;
+  background: var(--tm-bg);
+  color: var(--tm-text);
+  padding: var(--tm-page-padding);
 }
 
 .tm-center-header,
@@ -241,10 +244,10 @@ function formatUpdatedAt(value: string): string {
 .tm-summary-strip,
 .tm-project-card,
 .tm-empty-card {
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: rgba(24, 24, 27, 0.9);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-panel);
+  box-shadow: var(--tm-shadow-card);
 }
 
 .tm-center-header {
@@ -252,9 +255,9 @@ function formatUpdatedAt(value: string): string {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 14px;
 }
 
 .tm-center-header p,
@@ -271,8 +274,8 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-center-header h1 {
-  margin: 6px 0;
-  font-size: 34px;
+  margin: 4px 0;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -292,9 +295,9 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-button-primary {
-  border-color: rgba(129, 140, 248, 0.62);
-  background: #2f3347;
-  color: #eef2ff;
+  border-color: rgba(139, 140, 255, 0.62);
+  background: var(--tm-accent-gradient);
+  color: white;
   font-weight: 700;
 }
 
@@ -302,9 +305,9 @@ function formatUpdatedAt(value: string): string {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px) minmax(160px, 220px);
   gap: 14px;
-  max-width: 1180px;
-  margin: 18px auto 0;
-  padding: 18px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 10px;
 }
 
 .tm-filter-panel label {
@@ -329,35 +332,37 @@ function formatUpdatedAt(value: string): string {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  max-width: 1180px;
-  margin: 18px auto 0;
-  padding: 16px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 10px;
 }
 
 .tm-summary-strip > div {
   border-radius: 8px;
   background: #111113;
-  padding: 14px;
+  padding: 8px 10px;
 }
 
 .tm-summary-strip strong {
   display: block;
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 4px;
+  font-size: 20px;
 }
 
 .tm-project-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  max-width: 1180px;
-  margin: 18px auto 0;
+  gap: 10px;
+  max-width: var(--tm-page-max-width);
+  max-height: calc(100vh - var(--tm-nav-height) - 284px);
+  overflow: auto;
+  margin: 10px auto 0;
 }
 
 .tm-project-card,
 .tm-empty-card {
   min-width: 0;
-  padding: 18px;
+  padding: 12px;
 }
 
 .tm-project-card header {
@@ -440,7 +445,7 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-error {
-  max-width: 1180px;
+  max-width: var(--tm-page-max-width);
   margin: 18px auto 0;
   color: #fca5a5;
 }

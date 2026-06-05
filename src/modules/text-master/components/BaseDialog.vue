@@ -9,11 +9,14 @@
   width: min(720px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
   overflow: auto;
-  border: 1px solid rgba(148, 148, 160, 0.22);
-  border-radius: 8px;
-  background: #18181b;
-  color: #f4f4f5;
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.48);
+  border: 1px solid var(--tm-border-strong);
+  border-radius: var(--tm-radius-panel);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--tm-panel-solid);
+  background-color: var(--tm-panel-solid);
+  color: var(--tm-text);
+  box-shadow: var(--tm-shadow-raised);
   padding: 22px;
 }
 

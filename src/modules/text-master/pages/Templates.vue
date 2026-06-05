@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { textMasterNavigation, textMasterRoutePaths } from '../routes';
+import TopNav from '../components/TopNav.vue';
+import { textMasterRoutePaths } from '../routes';
 import type { TextProjectType } from '../types/project';
 
 type TemplateCategory =
@@ -158,16 +159,8 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 </script>
 
 <template>
-  <main class="tm-template-page">
-    <nav class="tm-template-nav" aria-label="Text Master navigation">
-      <RouterLink
-        v-for="item in textMasterNavigation"
-        :key="item.path"
-        :to="item.path"
-      >
-        {{ item.label }}
-      </RouterLink>
-    </nav>
+  <main class="tm-template-page" data-testid="text-master-templates">
+    <TopNav />
 
     <header class="tm-template-hero">
       <div>
@@ -237,12 +230,12 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 
 <style scoped>
 .tm-template-page {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
-  overflow-x: hidden;
-  background: #050506;
-  color: #f4f4f5;
-  padding: 28px;
+  overflow: hidden;
+  background: var(--tm-bg);
+  color: var(--tm-text);
+  padding: var(--tm-page-padding);
 }
 
 .tm-template-nav,
@@ -250,17 +243,17 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 .tm-category-strip,
 .tm-market-status,
 .tm-template-card {
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: rgba(24, 24, 27, 0.9);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-panel);
+  box-shadow: var(--tm-shadow-card);
 }
 
 .tm-template-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-width: 1180px;
+  max-width: var(--tm-page-max-width);
   margin: 0 auto 18px;
   padding: 10px;
 }
@@ -285,9 +278,9 @@ async function useTemplate(template: TemplateCard): Promise<void> {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
   gap: 20px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 26px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 14px;
 }
 
 .tm-template-hero p,
@@ -303,8 +296,8 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 }
 
 .tm-template-hero h1 {
-  margin: 8px 0;
-  font-size: 38px;
+  margin: 4px 0;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -319,7 +312,7 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 .tm-template-hero aside {
   border-radius: 8px;
   background: #111113;
-  padding: 18px;
+  padding: 12px;
 }
 
 .tm-template-hero aside strong {
@@ -338,71 +331,73 @@ async function useTemplate(template: TemplateCard): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  max-width: 1180px;
-  margin: 18px auto 0;
-  padding: 12px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 8px;
 }
 
 .tm-category-strip button.active,
 .tm-button-primary {
-  border-color: rgba(129, 140, 248, 0.62);
-  background: #2f3347;
-  color: #eef2ff;
+  border-color: rgba(139, 140, 255, 0.62);
+  background: var(--tm-accent-gradient);
+  color: white;
   font-weight: 700;
 }
 
 .tm-market-status {
-  max-width: 1180px;
-  margin: 18px auto 0;
-  padding: 12px 14px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 8px 12px;
   text-transform: none;
 }
 
 .tm-template-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  max-width: 1180px;
-  margin: 18px auto 0;
+  gap: 10px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  max-height: calc(100vh - var(--tm-nav-height) - 290px);
+  overflow: auto;
 }
 
 .tm-template-card {
   display: grid;
   min-width: 0;
   grid-template-rows: auto auto 1fr auto auto;
-  gap: 16px;
-  padding: 20px;
+  gap: 8px;
+  padding: 12px;
 }
 
 .tm-template-card h2 {
-  margin: 8px 0 0;
-  font-size: 20px;
+  margin: 4px 0 0;
+  font-size: 16px;
 }
 
 .tm-template-card p {
   margin: 0;
   color: #c4c4c8;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .tm-template-card dl {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   margin: 0;
 }
 
 .tm-template-card dl div {
   border-radius: 8px;
   background: #111113;
-  padding: 12px;
+  padding: 8px;
 }
 
 .tm-template-card dd {
   margin: 6px 0 0;
   color: #e4e4e7;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.35;
 }
 
 .tm-template-tags {
@@ -435,6 +430,48 @@ async function useTemplate(template: TemplateCard): Promise<void> {
   .tm-template-hero,
   .tm-template-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 820px) and (min-width: 981px) {
+  .tm-template-page.tm-template-page {
+    padding-block: 10px !important;
+  }
+
+  .tm-template-hero {
+    margin-top: 6px;
+    padding: 10px;
+  }
+
+  .tm-template-hero h1 {
+    font-size: 22px;
+  }
+
+  .tm-template-hero > div > span,
+  .tm-template-hero aside p,
+  .tm-template-card p,
+  .tm-template-card dd {
+    line-height: 1.25;
+  }
+
+  .tm-category-strip,
+  .tm-market-status,
+  .tm-template-grid {
+    margin-top: 6px;
+  }
+
+  .tm-category-strip {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .tm-template-grid {
+    max-height: calc(100vh - var(--tm-nav-height) - 280px);
+  }
+
+  .tm-template-card {
+    gap: 6px;
+    padding: 10px;
   }
 }
 

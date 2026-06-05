@@ -27,7 +27,7 @@ defineEmits<{
 </script>
 
 <template>
-  <aside class="tm-workspace-sidebar">
+  <aside class="tm-workspace-sidebar" data-testid="text-master-sidebar">
     <div class="tm-sidebar-title">
       <span>Workspace</span>
       <strong>生产导航</strong>
@@ -35,14 +35,17 @@ defineEmits<{
 
     <nav aria-label="Workspace sections">
       <button
-        v-for="item in items"
+        v-for="(item, index) in items"
         :key="item.key"
         type="button"
         :class="{ active: activeStep === item.key }"
         @click="$emit('select', item.key)"
       >
-        <strong>{{ item.label }}</strong>
-        <span>{{ item.description }}</span>
+        <span class="tm-sidebar-index">{{ index + 1 }}</span>
+        <span class="tm-sidebar-copy">
+          <strong>{{ item.label }}</strong>
+          <span>{{ item.description }}</span>
+        </span>
       </button>
     </nav>
   </aside>
@@ -50,14 +53,20 @@ defineEmits<{
 
 <style scoped>
 .tm-workspace-sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: var(--tm-sidebar-width);
+  min-width: var(--tm-sidebar-width);
+  max-width: var(--tm-sidebar-width);
   min-height: 0;
   height: 100%;
   overflow-y: auto;
-  border-right: 1px solid rgba(161, 161, 170, 0.14);
-  background: #0f0f12;
-  color: #f4f4f5;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--tm-panel);
+  background-color: var(--tm-panel-solid);
+  color: var(--tm-text);
+  box-shadow: var(--tm-shadow-card);
   padding: 14px;
 }
 
@@ -70,7 +79,7 @@ defineEmits<{
 
 .tm-sidebar-title span,
 nav button span {
-  color: #a1a1aa;
+  color: var(--tm-text-muted);
   font-size: 12px;
   letter-spacing: 0;
 }
@@ -86,31 +95,58 @@ nav {
 
 nav button {
   display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
   gap: 4px;
   width: 100%;
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--tm-radius-control);
   background: transparent;
   color: inherit;
-  padding: 10px;
+  min-height: 52px;
+  padding: 10px 11px;
   text-align: left;
 }
 
+.tm-sidebar-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tm-sidebar-index {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--tm-radius-pill);
+  background: rgba(139, 140, 255, 0.12);
+  color: var(--tm-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 nav button strong,
-nav button span {
+.tm-sidebar-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 nav button.active {
-  border-color: rgba(129, 140, 248, 0.46);
-  background: #1f2130;
+  border-color: rgba(48, 103, 255, 0.4);
+  background: rgba(48, 103, 255, 0.12);
+  color: var(--tm-text);
+}
+
+nav button.active .tm-sidebar-index {
+  background: var(--tm-accent-gradient);
+  color: white;
 }
 
 nav button:hover {
-  background: #18181b;
+  background: var(--tm-card);
 }
 
 @media (max-width: 980px) {
@@ -119,8 +155,8 @@ nav button:hover {
     min-width: 0;
     height: auto;
     overflow: visible;
-    border-right: 0;
-    border-bottom: 1px solid rgba(161, 161, 170, 0.14);
+    border-right: 1px solid var(--tm-border);
+    border-bottom: 1px solid var(--tm-border);
   }
 
   nav {

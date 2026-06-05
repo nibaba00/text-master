@@ -20,6 +20,7 @@ const FUNCTIONAL_REPORT_JSON = path.join(RUN_DIR, 'functional-audit-report.json'
 const ROUTE_STATUS_JSON = path.join(RUN_DIR, 'route-status.json');
 const CONSOLE_ERRORS_JSON = path.join(RUN_DIR, 'console-errors.json');
 const OVERFLOW_REPORT_JSON = path.join(RUN_DIR, 'overflow-report.json');
+const VIEWPORT_FIT_REPORT_JSON = path.join(RUN_DIR, 'viewport-fit-report.json');
 const BRAIN_HUB_REPORT_JSON = path.join(RUN_DIR, 'brain-hub-adapter-report.json');
 const MANUAL_GUIDE_MD = path.join(RUN_DIR, 'manual-audit-guide.md');
 const ZIP_PATH = path.join(RUN_DIR, `text-master-visual-audit-${TIMESTAMP}.zip`);
@@ -40,10 +41,16 @@ const BROWSER_EXECUTABLE_PATH = process.env.TEXTMASTER_AUDIT_BROWSER_PATH?.trim(
 
 process.env.PLAYWRIGHT_BROWSERS_PATH = PLAYWRIGHT_BROWSERS_PATH;
 const VIEWPORTS = [
+  { name: '1400x900', width: 1400, height: 900 },
   { name: '1440x900', width: 1440, height: 900 },
   { name: '1366x768', width: 1366, height: 768 },
+  { name: '1600x1000', width: 1600, height: 1000, referenceOnly: true },
 ];
-const WORKSPACE_VIEWPORT = { name: '1440x900', width: 1440, height: 900 };
+const WORKSPACE_VIEWPORTS = [
+  { name: '1400x900', width: 1400, height: 900 },
+  { name: '1440x900', width: 1440, height: 900 },
+  { name: '1600x1000', width: 1600, height: 1000, referenceOnly: true },
+];
 const FUNCTIONAL_VIEWPORT = { name: 'functional-1440x900', width: 1440, height: 900 };
 
 const INDEPENDENT_PAGES = [
@@ -54,6 +61,7 @@ const INDEPENDENT_PAGES = [
   { key: 'templates', label: 'Templates', path: '/templates' },
   { key: 'exports', label: 'Exports', path: '/exports' },
   { key: 'settings', label: 'Settings', path: '/settings' },
+  { key: 'profile', label: 'User Profile', path: '/profile' },
 ];
 
 const WORKSPACE_STEPS = [
@@ -104,11 +112,13 @@ const auditState = {
   screenshotCount: 0,
   consoleErrorCount: 0,
   overflowPageCount: 0,
+  viewportFitIssueCount: 0,
   failedPageCount: 0,
   blankPageCount: 0,
   results: [],
   consoleErrors: [],
   overflowReports: [],
+  viewportFitReports: [],
   routeStatuses: [],
   functionalResults: [],
   functionalSummary: createFunctionalSummary(),
@@ -472,8 +482,10 @@ async function auditWithBrowser(browser) {
     }
   }
 
-  for (const step of WORKSPACE_STEPS) {
-    await auditWorkspaceStep(browser, step);
+  for (const viewport of WORKSPACE_VIEWPORTS) {
+    for (const step of WORKSPACE_STEPS) {
+      await auditWorkspaceStep(browser, step, viewport);
+    }
   }
 
   await auditFunctionalLinks(browser);
@@ -500,15 +512,9 @@ async function auditRouteScreenshot(browser, route, viewport, screenshotName) {
   const diagnostics = await evaluatePage(page).catch((error) => ({
     evaluationError: error instanceof Error ? error.message : String(error),
   }));
-  let screenshotSaved = false;
-
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    screenshotSaved = fs.existsSync(screenshotPath);
-  } catch (error) {
-    loadError = [loadError, error instanceof Error ? error.message : String(error)]
-      .filter(Boolean)
-      .join(' | ');
+  const screenshotCapture = await saveScreenshotPair(page, screenshotPath);
+  if (screenshotCapture.error) {
+    loadError = [loadError, screenshotCapture.error].filter(Boolean).join(' | ');
   }
 
   const result = buildResult({
@@ -524,15 +530,16 @@ async function auditRouteScreenshot(browser, route, viewport, screenshotName) {
     pageConsole,
     pageExceptions,
     screenshotPath,
-    screenshotSaved,
+    screenshotSaved: screenshotCapture.screenshotSaved,
+    fullPageScreenshotPath: screenshotCapture.fullPageScreenshotPath,
+    fullPageScreenshotSaved: screenshotCapture.fullPageScreenshotSaved,
   });
 
   recordResult(result);
   await page.close();
 }
 
-async function auditWorkspaceStep(browser, step) {
-  const viewport = WORKSPACE_VIEWPORT;
+async function auditWorkspaceStep(browser, step, viewport) {
   const workspacePath = `/projects/${encodeURIComponent(PROJECT_ID)}`;
   const url = routeUrl(workspacePath);
   const page = await browser.newPage({ viewport });
@@ -555,15 +562,9 @@ async function auditWorkspaceStep(browser, step) {
   const diagnostics = await evaluatePage(page).catch((error) => ({
     evaluationError: error instanceof Error ? error.message : String(error),
   }));
-  let screenshotSaved = false;
-
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    screenshotSaved = fs.existsSync(screenshotPath);
-  } catch (error) {
-    loadError = [loadError, error instanceof Error ? error.message : String(error)]
-      .filter(Boolean)
-      .join(' | ');
+  const screenshotCapture = await saveScreenshotPair(page, screenshotPath);
+  if (screenshotCapture.error) {
+    loadError = [loadError, screenshotCapture.error].filter(Boolean).join(' | ');
   }
 
   const result = buildResult({
@@ -579,7 +580,9 @@ async function auditWorkspaceStep(browser, step) {
     pageConsole,
     pageExceptions,
     screenshotPath,
-    screenshotSaved,
+    screenshotSaved: screenshotCapture.screenshotSaved,
+    fullPageScreenshotPath: screenshotCapture.fullPageScreenshotPath,
+    fullPageScreenshotSaved: screenshotCapture.fullPageScreenshotSaved,
   });
 
   recordResult(result);
@@ -642,12 +645,18 @@ async function auditHomeFunctional(browser, result) {
       );
       const linkHrefs = Array.from(document.querySelectorAll('a')).map((link) => link.getAttribute('href') ?? '');
       const textIncludes = (value) => normalizedText.includes(value);
-      const topbar = document.querySelector('.tm-home-topbar');
+      const topbar = document.querySelector('.tm-top-nav, .tm-home-topbar');
       const topbarText = topbar?.textContent?.replace(/\s+/g, ' ') ?? '';
       const hero = document.querySelector('.tm-hero-panel');
       const heroText = hero?.textContent?.replace(/\s+/g, ' ') ?? '';
       const pipeline = document.querySelector('.tm-pipeline-card');
       const pipelineText = pipeline?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const quickTemplatesPanel = document.querySelector('[data-testid="home-quick-templates"]');
+      const quickTemplatesText = quickTemplatesPanel?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const adsContestPanel = document.querySelector('[data-testid="home-ads-contest"]');
+      const adsContestText = adsContestPanel?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const footerStatus = document.querySelector('.tm-home-footer');
+      const footerStatusText = footerStatus?.textContent?.replace(/\s+/g, ' ') ?? '';
       const projectCards = Array.from(document.querySelectorAll('.tm-project-card'));
       const projectCardText = projectCards.map((card) => card.textContent?.replace(/\s+/g, ' ') ?? '').join(' ');
       const tasksCard = document.querySelector('.tm-tasks-card');
@@ -666,7 +675,7 @@ async function auditHomeFunctional(browser, result) {
         '导出中心',
       ];
       const pipelineStatuses = ['已完成', '已连接', '运行中', '待开始', '待处理', '自动开启', '可用'];
-      const requiredTemplates = ['短剧分集大纲', '小说章节生成', '小红书文案', '项目 README'];
+      const requiredTemplates = ['短剧分集大纲', '小说章节生成', '小红书文案', '项目 README', '商业 BP 文案'];
 
       return {
         hasTextMasterTitle: Boolean(
@@ -724,12 +733,21 @@ async function auditHomeFunctional(browser, result) {
           statusCount: pipelineStatuses.filter((status) => pipelineText.includes(status)).length,
           hasWorkbenchButton: /查看工作台/.test(pipelineText),
         },
+        quickTemplates: {
+          exists: Boolean(quickTemplatesPanel),
+          hasTestId: Boolean(document.querySelector('[data-testid="home-quick-templates"]')),
+          hasTitle: /快速模板/.test(quickTemplatesText),
+          templateCount: requiredTemplates.filter((template) => quickTemplatesText.includes(template)).length,
+          hasAllTemplatesEntry: /查看全部模板/.test(quickTemplatesText),
+          hasArrow: /→/.test(quickTemplatesText),
+        },
         recentProjects: {
           cardCount: projectCards.length,
           hasCopyCard: /商业文案/.test(projectCardText) && /AI 写作工具发布文案/.test(projectCardText),
           hasDramaCard: /短剧项目/.test(projectCardText) && /便利店夜班/.test(projectCardText),
-          hasSteps: /审核工厂/.test(projectCardText) && /大纲工厂/.test(projectCardText),
-          hasProgress: /70%/.test(projectCardText) && /12%/.test(projectCardText),
+          hasDocumentCard: /项目文档/.test(projectCardText) && /产品需求文档/.test(projectCardText),
+          hasSteps: /审核工厂/.test(projectCardText) && /大纲工厂/.test(projectCardText) && /导出中心/.test(projectCardText),
+          hasProgress: /70%/.test(projectCardText) && /12%/.test(projectCardText) && /86%/.test(projectCardText),
           hasActions:
             /继续生产/.test(projectCardText) && /查看版本/.test(projectCardText) && /导出/.test(projectCardText),
         },
@@ -737,9 +755,21 @@ async function auditHomeFunctional(browser, result) {
           hasTasksTitle: Boolean(tasksCard) && /今日生产任务/.test(tasksCard.textContent ?? ''),
           taskCount: Array.from(tasksCard?.querySelectorAll('li') ?? []).length,
           hasStartButton: Boolean(tasksCard) && /开始处理/.test(tasksCard.textContent ?? ''),
-          hasTemplatesTitle: Boolean(templatesCard) && /快速模板/.test(templatesCard.textContent ?? ''),
-          templateCount: requiredTemplates.filter((template) => templatesCard?.textContent?.includes(template)).length,
-          hasAllTemplatesEntry: Boolean(templatesCard) && /查看全部模板/.test(templatesCard.textContent ?? ''),
+          hasTemplatesTitle: Boolean(quickTemplatesPanel) && /快速模板/.test(quickTemplatesText),
+          templateCount: requiredTemplates.filter((template) => quickTemplatesText.includes(template)).length,
+          hasAllTemplatesEntry: /查看全部模板/.test(quickTemplatesText),
+          hasAdsContest:
+            Boolean(adsContestPanel) &&
+            /Text Master Pro/.test(adsContestText) &&
+            /短剧创作大赛/.test(adsContestText),
+          hasFooterStatus:
+            Boolean(footerStatus) &&
+            /Text Master/.test(footerStatusText) &&
+            /独立运行/.test(footerStatusText) &&
+            /总字数/.test(footerStatusText) &&
+            /总文档/.test(footerStatusText) &&
+            /总版本/.test(footerStatusText) &&
+            /本地空间/.test(footerStatusText),
         },
       };
     });
@@ -801,21 +831,85 @@ async function auditCreateProjectFunctional(browser, result) {
 
     const firstStep = await page.evaluate(() => {
       const text = document.body?.innerText ?? '';
+      const normalizedText = text.replace(/\s+/g, ' ');
       const buttons = Array.from(document.querySelectorAll('button')).map((button, index) => ({
         index,
         text: button.innerText,
         disabled: button.disabled,
       }));
+      const typeCards = Array.from(document.querySelectorAll('.tm-type-grid button')).map((button) =>
+        button.textContent?.replace(/\s+/g, ' ') ?? '',
+      );
+      const templateStrip = document.querySelector('[data-testid="create-template-strip"]');
+      const templateStripText = templateStrip?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const sidebar = document.querySelector('.tm-create-sidebar');
+      const sidebarText = sidebar?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const inspector = document.querySelector('.tm-create-inspector');
+      const inspectorText = inspector?.textContent?.replace(/\s+/g, ' ') ?? '';
+      const footer = document.querySelector('.tm-create-footer');
+      const footerText = footer?.textContent?.replace(/\s+/g, ' ') ?? '';
       return {
         text,
+        normalizedText,
+        hasCreateTestId: Boolean(document.querySelector('[data-testid="text-project-create"]')),
+        hasTopNav: Boolean(document.querySelector('.tm-top-nav')),
+        hasPageTitle: /新建文本项目/.test(normalizedText),
+        hasReturnHome: /返回首页/.test(normalizedText),
+        hasHelpEntry: /帮助说明/.test(normalizedText),
+        hasLeftFlow: Boolean(sidebar) && /新建项目流程/.test(sidebarText) && /选择项目类型/.test(sidebarText) && /基础信息/.test(sidebarText) && /模板与设定/.test(sidebarText) && /完成创建/.test(sidebarText),
+        hasLeftUtility:
+          Boolean(sidebar) &&
+          /创建记录/.test(sidebarText) &&
+          /草稿箱/.test(sidebarText) &&
+          /导入记录/.test(sidebarText) &&
+          /项目类型说明/.test(sidebarText) &&
+          /模板选择指南/.test(sidebarText) &&
+          /新建项目教程/.test(sidebarText) &&
+          /反馈问题/.test(sidebarText),
+        hasStepStrip:
+          /1\s*选择项目类型/.test(normalizedText) &&
+          /2\s*基础信息/.test(normalizedText) &&
+          /3\s*模板与设定/.test(normalizedText) &&
+          /4\s*完成创建/.test(normalizedText),
         hasTypePanel: Boolean(document.querySelector('.tm-type-grid')) || /项目类型|Project Type|Step 1/i.test(text),
+        typeCardCount: typeCards.length,
+        hasShortDramaTestId: Boolean(document.querySelector('[data-testid="create-project-type-card-short-drama"]')),
+        hasDefaultShortDramaSelected: Boolean(
+          document.querySelector('[data-testid="create-project-type-card-short-drama"].selected'),
+        ),
+        hasTypeFrequencies: ['32%', '24%', '18%', '12%', '6%', '4%', '2%'].every((item) => normalizedText.includes(item)),
         hasNovel: text.includes('小说项目'),
         hasShortDrama: text.includes('短剧项目'),
         hasBusinessCopy: text.includes('商业文案'),
         hasDocument: text.includes('项目文档'),
+        hasExtraTypes:
+          text.includes('小红书文案') &&
+          text.includes('学术与报告') &&
+          text.includes('翻译与本地化') &&
+          text.includes('自定义类型'),
+        hasTemplateStrip:
+          Boolean(templateStrip) &&
+          /快速选择已有模板，可跳过/.test(templateStripText) &&
+          ['短剧分集大纲', '短剧分集剧本', '小说章节大纲', '小说章节正文', '商业文案模板', '浏览全部模板'].every((item) =>
+            templateStripText.includes(item),
+          ),
+        hasRightInfo:
+          Boolean(inspector) &&
+          /类型说明/.test(inspectorText) &&
+          /使用频率排行/.test(inspectorText) &&
+          /快捷键提示/.test(inspectorText) &&
+          /创建记录/.test(inspectorText),
+        hasBottomActions:
+          Boolean(footer) &&
+          /设为默认类型/.test(footerText) &&
+          /取消/.test(footerText) &&
+          /下一步：填写基础信息/.test(footerText) &&
+          Boolean(document.querySelector('[data-testid="create-next-button"]')),
+        hasTechnicalText: /short_drama|business_copy|LocalRuntime|LocalStorage|expand|faithful|rebuild/i.test(normalizedText),
         buttons,
       };
     });
+    auditState.scoreContext.create = firstStep;
 
     requireFunctional(result, firstStep.hasTypePanel, '项目类型选择存在', '缺少项目类型选择。');
     requireFunctional(result, firstStep.hasNovel, '小说项目选项存在', '缺少小说项目选项。');
@@ -862,7 +956,7 @@ async function auditCreateProjectFunctional(browser, result) {
       });
       return {
         text,
-        hasStep2: /Step 2|基础设定/i.test(text) || Boolean(document.querySelector('.tm-form-grid')),
+        hasStep2: /Step 2|基础信息|基础设定/i.test(text) || Boolean(document.querySelector('.tm-form-grid')),
         fieldCount: fields.length,
       };
     });
@@ -875,8 +969,8 @@ async function auditCreateProjectFunctional(browser, result) {
     );
     warnIfFallback(
       result,
-      secondStep.hasStep2 && !secondStep.text.includes('基础设定'),
-      '基础设定表单存在，但标题文案未匹配“基础设定”。',
+      secondStep.hasStep2 && !secondStep.text.includes('基础信息') && !secondStep.text.includes('基础设定'),
+      '基础信息表单存在，已按新版创建向导文案通过。',
     );
   } finally {
     await page.close();
@@ -894,6 +988,32 @@ async function auditWorkspaceFunctional(browser, result) {
 
     const layout = await evaluateWorkspaceLayout(page);
     auditState.scoreContext.workspace.layout = layout;
+    const overview = await page.evaluate(() => {
+      const text = document.body?.innerText ?? '';
+      const overviewPanel = document.querySelector('[data-testid="workspace-overview"]');
+      const hero = document.querySelector('.tm-overview-hero');
+      const metrics = document.querySelectorAll('.tm-overview-metrics article');
+      const flowCards = document.querySelectorAll('.tm-flow-card');
+      const nextPanel = document.querySelector('.tm-overview-next');
+      return {
+        hasWorkspaceTestId: Boolean(document.querySelector('[data-testid="text-master-workspace"]')),
+        hasMainTestId: Boolean(document.querySelector('[data-testid="text-master-main"]')),
+        hasSidebarTestId: Boolean(document.querySelector('[data-testid="text-master-sidebar"]')),
+        hasAiPanelTestId: Boolean(document.querySelector('[data-testid="text-master-ai-panel"]')),
+        hasOverviewTestId: Boolean(overviewPanel),
+        hasProjectName: /项目名称/.test(text) || /当前项目/.test(text),
+        hasProjectType: /项目类型/.test(text),
+        hasSummary: /项目摘要/.test(text) || /摘要/.test(text),
+        hasProgress: /项目进度/.test(text) || /进度/.test(text),
+        hasTotalWords: /总字数/.test(text),
+        hasPendingItems: /待处理事项/.test(text),
+        hasHero: Boolean(hero),
+        metricCount: metrics.length,
+        flowCount: flowCards.length,
+        hasNextPanel: Boolean(nextPanel) && /下一步/.test(nextPanel.textContent ?? ''),
+      };
+    });
+    auditState.scoreContext.workspace.overview = overview;
     requireFunctional(result, layout.hasSidebar, '左侧流程导航存在', '工作台缺少左侧流程导航。');
     requireFunctional(result, layout.hasMain, '中央主工作区存在', '工作台缺少中央主工作区。');
     requireFunctional(result, layout.hasAiPanel, '右侧 AI 操作栏存在', '工作台缺少右侧 AI 操作栏。');
@@ -903,6 +1023,22 @@ async function auditWorkspaceFunctional(browser, result) {
       '工作台三栏结构存在',
       `工作台三栏结构缺失：sidebar=${layout.hasSidebar}, main=${layout.hasMain}, ai=${layout.hasAiPanel}`,
     );
+
+    requireFunctional(result, overview.hasWorkspaceTestId, '工作台容器 data-testid 存在', '工作台缺少主容器 data-testid。');
+    requireFunctional(result, overview.hasMainTestId, '主工作区 data-testid 存在', '工作台缺少主工作区 data-testid。');
+    requireFunctional(result, overview.hasSidebarTestId, '左侧导航 data-testid 存在', '工作台缺少左侧导航 data-testid。');
+    requireFunctional(result, overview.hasAiPanelTestId, 'AI 面板 data-testid 存在', '工作台缺少 AI 面板 data-testid。');
+    requireFunctional(result, overview.hasOverviewTestId, '项目总览区域 data-testid 存在', '项目总览区域缺少 data-testid。');
+    requireFunctional(result, overview.hasProjectName, '项目名称存在', '项目总览缺少项目名称。');
+    requireFunctional(result, overview.hasProjectType, '项目类型存在', '项目总览缺少项目类型。');
+    requireFunctional(result, overview.hasSummary, '项目摘要存在', '项目总览缺少摘要。');
+    requireFunctional(result, overview.hasProgress, '项目进度存在', '项目总览缺少进度信息。');
+    requireFunctional(result, overview.hasTotalWords, '总字数存在', '项目总览缺少总字数。');
+    requireFunctional(result, overview.hasPendingItems, '待处理事项存在', '项目总览缺少待处理事项。');
+    requireFunctional(result, overview.hasHero, '总览 hero 容器存在', '项目总览缺少 hero 容器。');
+    requireFunctional(result, overview.metricCount >= 4, '总览统计卡存在', '项目总览缺少关键统计卡。');
+    requireFunctional(result, overview.flowCount >= 6, '生产阶段卡存在', '项目总览缺少生产阶段卡。');
+    requireFunctional(result, overview.hasNextPanel, '下一步推荐区存在', '项目总览缺少下一步推荐区。');
 
     let previousSignature = await getWorkspaceMainSignature(page);
     const visitedSignatures = new Set([previousSignature]);
@@ -1222,21 +1358,63 @@ function isSevereConsoleError(text) {
 
 async function saveFunctionalScreenshot(page, result, screenshotName) {
   const screenshotPath = path.join(SCREENSHOT_DIR, screenshotName);
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: false });
-    if (fs.existsSync(screenshotPath)) {
-      const relativePath = recordScreenshot(screenshotPath);
-      if (!result.screenshots.includes(relativePath)) {
-        result.screenshots.push(relativePath);
-      }
+  const screenshotCapture = await saveScreenshotPair(page, screenshotPath);
+  for (const savedPath of screenshotCapture.savedPaths) {
+    const relativePath = recordScreenshot(savedPath);
+    if (!result.screenshots.includes(relativePath)) {
+      result.screenshots.push(relativePath);
     }
-  } catch (error) {
+  }
+
+  if (screenshotCapture.error) {
     addError(
       result,
       'screenshot',
-      `截图保存失败 ${screenshotName}: ${error instanceof Error ? error.message : String(error)}`,
+      `截图保存失败 ${screenshotName}: ${screenshotCapture.error}`,
     );
   }
+}
+
+async function saveScreenshotPair(page, screenshotPath) {
+  const fullPageScreenshotPath = addScreenshotSuffix(screenshotPath, 'fullpage');
+  const errors = [];
+  const savedPaths = [];
+  let screenshotSaved = false;
+  let fullPageScreenshotSaved = false;
+
+  try {
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    screenshotSaved = fs.existsSync(screenshotPath);
+    if (screenshotSaved) {
+      savedPaths.push(screenshotPath);
+    }
+  } catch (error) {
+    errors.push(`viewport screenshot: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    await page.screenshot({ path: fullPageScreenshotPath, fullPage: true });
+    fullPageScreenshotSaved = fs.existsSync(fullPageScreenshotPath);
+    if (fullPageScreenshotSaved) {
+      savedPaths.push(fullPageScreenshotPath);
+    }
+  } catch (error) {
+    errors.push(`full-page screenshot: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return {
+    screenshotPath,
+    screenshotSaved,
+    fullPageScreenshotPath,
+    fullPageScreenshotSaved,
+    savedPaths,
+    error: errors.join(' | '),
+  };
+}
+
+function addScreenshotSuffix(screenshotPath, suffix) {
+  const parsed = path.parse(screenshotPath);
+  return path.join(parsed.dir, `${parsed.name}-${suffix}${parsed.ext || '.png'}`);
 }
 
 async function evaluateWorkspaceLayout(page) {
@@ -1403,6 +1581,14 @@ function recordScreenshot(screenshotPath) {
   return relativeScreenshot;
 }
 
+function countFullPageScreenshots() {
+  return auditState.screenshots.filter((file) => /-fullpage\.[^/.]+$/i.test(file)).length;
+}
+
+function countViewportScreenshots() {
+  return auditState.screenshots.length - countFullPageScreenshots();
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -1434,8 +1620,15 @@ async function evaluatePage(page) {
     const body = document.body;
     const bodyText = body?.innerText ?? '';
     const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     const bodyRectWidth = body ? Math.ceil(body.getBoundingClientRect().width) : 0;
+    const bodyRectHeight = body ? Math.ceil(body.getBoundingClientRect().height) : 0;
     const maxScrollWidth = Math.max(html.scrollWidth, body?.scrollWidth ?? 0);
+    const maxScrollHeight = Math.max(html.scrollHeight, body?.scrollHeight ?? 0);
+    const horizontalOverflow = maxScrollWidth > html.clientWidth + 1 || bodyRectWidth > viewportWidth + 1;
+    const verticalOverflow = maxScrollHeight > html.clientHeight + 1 || bodyRectHeight > viewportHeight + 1;
+    const clippedVisibleElements = findViewportClippedElements();
+    const clippedContentOverflow = clippedVisibleElements.length > 0;
     const visibleInteractiveCount = Array.from(
       document.querySelectorAll('button, a, input, select, textarea, [role="button"]'),
     ).filter((element) => {
@@ -1460,17 +1653,97 @@ async function evaluatePage(page) {
       hasMainAction: visibleInteractiveCount > 0,
       visibleMediaCount,
       viewportWidth,
+      viewportHeight,
       clientWidth: html.clientWidth,
+      clientHeight: html.clientHeight,
       scrollWidth: maxScrollWidth,
+      scrollHeight: maxScrollHeight,
       bodyRectWidth,
-      horizontalOverflow: maxScrollWidth > html.clientWidth + 1 || bodyRectWidth > viewportWidth + 1,
+      bodyRectHeight,
+      horizontalOverflow,
+      verticalOverflow,
+      clippedContentOverflow,
+      clippedVisibleCount: clippedVisibleElements.length,
+      clippedVisibleElements,
+      viewportFits: !horizontalOverflow && !verticalOverflow && !clippedContentOverflow,
       bodyWidthExceedsViewport: bodyRectWidth > viewportWidth + 1,
+      bodyHeightExceedsViewport: bodyRectHeight > viewportHeight + 1,
       isBlankPage: bodyText.trim().length < 20 && visibleMediaCount === 0,
       hasKnownRuntimeErrorText: /(Cannot GET|404|Not Found|ReferenceError|SyntaxError|Unhandled Runtime Error)/i.test(
         bodyText,
       ),
       visual,
     };
+
+    function findViewportClippedElements() {
+      const selectors = [
+        'main',
+        'nav',
+        'header',
+        'footer',
+        'section',
+        'article',
+        'aside',
+        '[data-testid]',
+        '.tm-home-shell',
+        '.tm-home-top',
+        '.tm-recent-panel',
+        '.tm-home-footer',
+      ].join(', ');
+      return Array.from(document.querySelectorAll(selectors))
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = window.getComputedStyle(element);
+          return (
+            rect.width > 1 &&
+            rect.height > 1 &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none' &&
+            !hasScrollableAncestor(element)
+          );
+        })
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName.toLowerCase(),
+            className: String(element.className || '').slice(0, 120),
+            testId: element.getAttribute('data-testid') || '',
+            top: Math.round(rect.top),
+            right: Math.round(rect.right),
+            bottom: Math.round(rect.bottom),
+            left: Math.round(rect.left),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        })
+        .filter((item) => item.left < viewportWidth - 1 && item.top < viewportHeight - 1)
+        .filter(
+          (item) =>
+            item.right > viewportWidth + 1 ||
+            item.bottom > viewportHeight + 1 ||
+            item.left < -1 ||
+            item.top < -1,
+        )
+        .slice(0, 20);
+    }
+
+    function hasScrollableAncestor(element) {
+      let current = element.parentElement;
+      while (current && current !== document.body && current !== document.documentElement) {
+        const style = window.getComputedStyle(current);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const scrollableY =
+          /auto|scroll/i.test(overflowY) && current.scrollHeight > current.clientHeight + 1;
+        const scrollableX =
+          /auto|scroll/i.test(overflowX) && current.scrollWidth > current.clientWidth + 1;
+        if (scrollableY || scrollableX) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    }
 
     function evaluateVisualStyle() {
       const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
@@ -1689,6 +1962,8 @@ function buildResult({
   pageExceptions,
   screenshotPath,
   screenshotSaved,
+  fullPageScreenshotPath,
+  fullPageScreenshotSaved = false,
 }) {
   const consoleErrorCount = pageConsole.length + pageExceptions.length;
   const statusOk = Number(responseStatus) >= 200 && Number(responseStatus) < 400;
@@ -1698,6 +1973,16 @@ function buildResult({
     Boolean(diagnostics?.hasKnownRuntimeErrorText) ||
     Boolean(diagnostics?.evaluationError);
   const relativeScreenshot = path.relative(RUN_DIR, screenshotPath).replace(/\\/g, '/');
+  const relativeFullPageScreenshot = fullPageScreenshotPath
+    ? path.relative(RUN_DIR, fullPageScreenshotPath).replace(/\\/g, '/')
+    : '';
+  const screenshots = [];
+  if (screenshotSaved) {
+    screenshots.push(relativeScreenshot);
+  }
+  if (fullPageScreenshotSaved && relativeFullPageScreenshot) {
+    screenshots.push(relativeFullPageScreenshot);
+  }
 
   return {
     kind,
@@ -1715,12 +2000,21 @@ function buildResult({
     consoleErrorCount,
     hasUncaughtException: pageExceptions.length > 0,
     horizontalOverflow: Boolean(diagnostics?.horizontalOverflow),
+    verticalOverflow: Boolean(diagnostics?.verticalOverflow),
+    clippedContentOverflow: Boolean(diagnostics?.clippedContentOverflow),
+    clippedVisibleCount: Number(diagnostics?.clippedVisibleCount ?? 0),
+    viewportFits: Boolean(diagnostics?.viewportFits),
+    referenceOnlyViewport: Boolean(viewport.referenceOnly),
     bodyWidthExceedsViewport: Boolean(diagnostics?.bodyWidthExceedsViewport),
+    bodyHeightExceedsViewport: Boolean(diagnostics?.bodyHeightExceedsViewport),
     isBlankPage: Boolean(diagnostics?.isBlankPage),
     hasTextMasterKeyword: Boolean(diagnostics?.hasTextMasterKeyword),
     hasMainAction: Boolean(diagnostics?.hasMainAction),
     screenshotSaved,
     screenshot: relativeScreenshot,
+    fullPageScreenshotSaved,
+    fullPageScreenshot: relativeFullPageScreenshot,
+    screenshots,
     diagnostics,
     consoleErrors: [...pageConsole, ...pageExceptions],
   };
@@ -1736,10 +2030,20 @@ function recordResult(result) {
     status: result.status,
     statusOk: result.statusOk,
     failed: result.failed,
+    referenceOnlyViewport: result.referenceOnlyViewport,
+    horizontalOverflow: result.horizontalOverflow,
+    verticalOverflow: result.verticalOverflow,
+    clippedContentOverflow: result.clippedContentOverflow,
+    clippedVisibleCount: result.clippedVisibleCount,
+    viewportFits: result.viewportFits,
     isBlankPage: result.isBlankPage,
     hasTextMasterKeyword: result.hasTextMasterKeyword,
     hasMainAction: result.hasMainAction,
     screenshotSaved: result.screenshotSaved,
+    fullPageScreenshotSaved: result.fullPageScreenshotSaved,
+    screenshot: result.screenshot,
+    fullPageScreenshot: result.fullPageScreenshot,
+    screenshots: result.screenshots,
   });
   auditState.consoleErrors.push(...result.consoleErrors);
 
@@ -1757,8 +2061,32 @@ function recordResult(result) {
     });
   }
 
-  if (result.screenshotSaved) {
-    recordScreenshot(path.join(RUN_DIR, result.screenshot));
+  if (!result.referenceOnlyViewport && !result.viewportFits) {
+    auditState.viewportFitReports.push({
+      key: result.key,
+      route: result.route,
+      viewport: result.viewport,
+      viewportFits: result.viewportFits,
+      horizontalOverflow: result.horizontalOverflow,
+      verticalOverflow: result.verticalOverflow,
+      clippedContentOverflow: result.clippedContentOverflow,
+      clippedVisibleCount: result.clippedVisibleCount,
+      bodyWidthExceedsViewport: result.bodyWidthExceedsViewport,
+      bodyHeightExceedsViewport: result.bodyHeightExceedsViewport,
+      scrollWidth: result.diagnostics?.scrollWidth,
+      scrollHeight: result.diagnostics?.scrollHeight,
+      clientWidth: result.diagnostics?.clientWidth,
+      clientHeight: result.diagnostics?.clientHeight,
+      bodyRectWidth: result.diagnostics?.bodyRectWidth,
+      bodyRectHeight: result.diagnostics?.bodyRectHeight,
+      viewportWidth: result.diagnostics?.viewportWidth,
+      viewportHeight: result.diagnostics?.viewportHeight,
+      clippedVisibleElements: result.diagnostics?.clippedVisibleElements ?? [],
+    });
+  }
+
+  for (const screenshot of result.screenshots ?? []) {
+    recordScreenshot(path.join(RUN_DIR, screenshot));
   }
 
   recalculateSummary();
@@ -1768,6 +2096,7 @@ function recalculateSummary() {
   auditState.screenshotCount = auditState.screenshots.length;
   auditState.consoleErrorCount = auditState.consoleErrors.length;
   auditState.overflowPageCount = auditState.overflowReports.length;
+  auditState.viewportFitIssueCount = auditState.viewportFitReports.length;
   auditState.failedPageCount = auditState.routeStatuses.filter((item) => item.failed).length;
   auditState.blankPageCount = auditState.routeStatuses.filter((item) => item.isBlankPage).length;
   auditState.functionalSummary = createFunctionalSummary();
@@ -1783,6 +2112,8 @@ function createEmptyScore() {
     total: 0,
     level: '未形成可用 Text Master',
     homePageScore: 0,
+    createPageScore: 0,
+    userProfileDesignScore: 0,
     standaloneApp: 0,
     pageCompleteness: 0,
     workspaceStructure: 0,
@@ -1790,12 +2121,15 @@ function createEmptyScore() {
     productionFlow: 0,
     deductions: [],
     homePageDeductions: [],
+    createPageDeductions: [],
   };
 }
 
 function computeDesignScore() {
   const deductions = [];
   const homePage = scoreHomePage();
+  const createPage = scoreCreatePage();
+  const userProfilePage = scoreUserProfilePage();
   const standaloneApp = scoreStandaloneApp(deductions);
   const pageCompleteness = scorePageCompleteness(deductions);
   const workspaceStructure = scoreWorkspaceStructure(deductions);
@@ -1811,6 +2145,8 @@ function computeDesignScore() {
     total,
     level: scoreLevel(total),
     homePageScore: homePage.score,
+    createPageScore: createPage.score,
+    userProfileDesignScore: userProfilePage.score,
     standaloneApp,
     pageCompleteness,
     workspaceStructure,
@@ -1818,7 +2154,129 @@ function computeDesignScore() {
     productionFlow,
     deductions: deductions.sort((left, right) => right.pointsLost - left.pointsLost),
     homePageDeductions: homePage.deductions,
+    createPageDeductions: createPage.deductions,
+    userProfileDeductions: userProfilePage.deductions,
   };
+}
+
+function buildDesignReferenceScore(score) {
+  const pageScores = {
+    homeDesignScore: score.homePageScore,
+    createProjectDesignScore: score.createPageScore,
+    workspaceDesignScore: scoreWorkspaceDesignReference(score),
+    templatesDesignScore: scoreGenericDesignReferencePage('templates'),
+    exportsDesignScore: scoreGenericDesignReferencePage('exports'),
+    settingsDesignScore: scoreGenericDesignReferencePage('settings'),
+    userProfileDesignScore: score.userProfileDesignScore,
+  };
+  const weights = {
+    homeDesignScore: 20,
+    createProjectDesignScore: 10,
+    workspaceDesignScore: 35,
+    templatesDesignScore: 10,
+    exportsDesignScore: 10,
+    settingsDesignScore: 10,
+    userProfileDesignScore: 5,
+  };
+  const total = clampScore(
+    Object.entries(weights).reduce(
+      (sum, [key, weight]) => sum + ((pageScores[key] ?? 0) * weight) / 100,
+      0,
+    ),
+    0,
+    100,
+  );
+  const pages = [
+    designReferencePage('home', '01_home.png', pageScores.homeDesignScore),
+    designReferencePage('create', '02_create_project.png', pageScores.createProjectDesignScore),
+    designReferencePage(
+      'workspace',
+      [
+        '03_workspace_overview.png',
+        '04_workspace_settings.png',
+        '05_workspace_materials.png',
+        '06_workspace_outline.png',
+        '07_workspace_editor.png',
+        '08_workspace_rewrite.png',
+        '09_workspace_review.png',
+        '10_workspace_versions.png',
+      ],
+      pageScores.workspaceDesignScore,
+    ),
+    designReferencePage('exports', '11_exports.png', pageScores.exportsDesignScore),
+    designReferencePage('templates', '12_templates.png', pageScores.templatesDesignScore),
+    designReferencePage('settings', '13_settings.png', pageScores.settingsDesignScore),
+    designReferencePage('profile', '14_user_profile.png', pageScores.userProfileDesignScore),
+  ];
+  const deductions = pages
+    .filter((page) => page.score < 95)
+    .map((page) => ({
+      page: page.key,
+      pointsLost: 100 - page.score,
+      reason: `${page.key} design score below 95.`,
+      targetDesignImage: page.targetDesignImage,
+      currentScreenshot: page.currentScreenshot,
+    }));
+
+  return {
+    total,
+    ...pageScores,
+    deductions,
+    pages,
+  };
+}
+
+function scoreWorkspaceDesignReference(score) {
+  const usable = routeUsable('workspace');
+  const stepCoverage = WORKSPACE_STEPS.every((step) => routeUsable(step.key));
+  if (!usable) {
+    return 0;
+  }
+
+  return clampScore(
+    (score.workspaceStructure / 20) * 45 +
+      (score.productionFlow / 20) * 25 +
+      (score.visualStyle / 20) * 20 +
+      (stepCoverage ? 10 : 0),
+    0,
+    100,
+  );
+}
+
+function scoreGenericDesignReferencePage(key) {
+  const routeItems = auditState.routeStatuses.filter((item) => item.key === key);
+  const result = routeResult(key, '1440x900') ?? routeResult(key, '1366x768');
+  const visual = result?.diagnostics?.visual ?? {};
+  if (!routeItems.length) {
+    return 0;
+  }
+
+  return clampScore(
+    (routeUsable(key) ? 35 : 0) +
+      (routeNotBlank(key) ? 20 : 0) +
+      (routeItems.every((item) => item.referenceOnlyViewport || item.viewportFits) ? 15 : 0) +
+      (Boolean(visual.darkBase) && Number(visual.grayCardRatio) >= 0.65 ? 20 : 0) +
+      (routeHasMainAction(key) ? 10 : 0),
+    0,
+    100,
+  );
+}
+
+function designReferencePage(key, targetFileNames, score) {
+  const files = Array.isArray(targetFileNames) ? targetFileNames : [targetFileNames];
+  return {
+    key,
+    score,
+    targetDesignImage: files.map(designImagePath),
+    currentScreenshot: routeResult(key, '1440x900')?.screenshot ?? '',
+    currentFullPageScreenshot: routeResult(key, '1440x900')?.fullPageScreenshot ?? '',
+  };
+}
+
+function designImagePath(fileName) {
+  return path
+    .relative(ROOT_DIR, path.join(ROOT_DIR, 'TextMaster_all_pages_design_pack', 'pages', fileName))
+    .replace(/\\/g, '/');
 }
 
 function scoreHomePage() {
@@ -1899,24 +2357,27 @@ function scoreHomePage() {
     {
       points: 15,
       passed:
-        Boolean(home.pipeline?.exists) &&
-        Boolean(home.pipeline?.hasTitle) &&
-        Number(home.pipeline?.stepCount) >= 8 &&
-        Number(home.pipeline?.statusCount) >= 7 &&
-        Boolean(home.pipeline?.hasWorkbenchButton),
-      reason: '文本生产链路卡不完整。',
-      evidence: JSON.stringify(home.pipeline ?? {}),
+        !home.pipeline?.exists &&
+        Boolean(home.quickTemplates?.exists) &&
+        Boolean(home.quickTemplates?.hasTestId) &&
+        Boolean(home.quickTemplates?.hasTitle) &&
+        Number(home.quickTemplates?.templateCount) >= 5 &&
+        Boolean(home.quickTemplates?.hasAllTemplatesEntry) &&
+        Boolean(home.quickTemplates?.hasArrow),
+      reason: '首页应移除文本生产链路卡，并在 Hero 右侧放置完整快速模板。',
+      evidence: JSON.stringify({ pipeline: home.pipeline ?? {}, quickTemplates: home.quickTemplates ?? {} }),
     },
     {
       points: 10,
       passed:
-        Number(home.recentProjects?.cardCount) >= 2 &&
+        Number(home.recentProjects?.cardCount) >= 3 &&
         Boolean(home.recentProjects?.hasCopyCard) &&
         Boolean(home.recentProjects?.hasDramaCard) &&
+        Boolean(home.recentProjects?.hasDocumentCard) &&
         Boolean(home.recentProjects?.hasSteps) &&
         Boolean(home.recentProjects?.hasProgress) &&
         Boolean(home.recentProjects?.hasActions),
-      reason: '最近项目生产任务卡不完整。',
+      reason: '最近项目生产任务卡不完整，应至少包含商业文案、短剧项目和项目文档三张卡。',
       evidence: JSON.stringify(home.recentProjects ?? {}),
     },
     {
@@ -1926,9 +2387,11 @@ function scoreHomePage() {
         Number(home.todayAndTemplates?.taskCount) >= 3 &&
         Boolean(home.todayAndTemplates?.hasStartButton) &&
         Boolean(home.todayAndTemplates?.hasTemplatesTitle) &&
-        Number(home.todayAndTemplates?.templateCount) >= 4 &&
-        Boolean(home.todayAndTemplates?.hasAllTemplatesEntry),
-      reason: '今日生产任务或快速模板不完整。',
+        Number(home.todayAndTemplates?.templateCount) >= 5 &&
+        Boolean(home.todayAndTemplates?.hasAllTemplatesEntry) &&
+        Boolean(home.todayAndTemplates?.hasAdsContest) &&
+        Boolean(home.todayAndTemplates?.hasFooterStatus),
+      reason: '今日生产任务、运营栏目或页脚状态不完整。',
       evidence: JSON.stringify(home.todayAndTemplates ?? {}),
     },
     {
@@ -1978,6 +2441,221 @@ function scoreHomePage() {
     } else {
       deductions.push({
         dimension: '首页专项',
+        reason: check.reason,
+        pointsLost: check.points,
+        evidence: check.evidence,
+      });
+    }
+  }
+
+  return {
+    score: clampScore(score, 0, 100),
+    deductions: deductions.sort((left, right) => right.pointsLost - left.pointsLost),
+  };
+}
+
+function scoreCreatePage() {
+  const deductions = [];
+  const create = auditState.scoreContext.create ?? {};
+  const create1440 = routeResult('create', '1440x900');
+  const create1366 = routeResult('create', '1366x768');
+
+  const checks = [
+    {
+      points: 12,
+      passed:
+        Boolean(create.hasCreateTestId) &&
+        Boolean(create.hasTopNav) &&
+        Boolean(create.hasPageTitle) &&
+        Boolean(create.hasReturnHome) &&
+        Boolean(create.hasHelpEntry),
+      reason: '新建页顶部导航、页面标题、返回首页或帮助说明入口不完整。',
+      evidence: JSON.stringify({
+        hasCreateTestId: create.hasCreateTestId,
+        hasTopNav: create.hasTopNav,
+        hasPageTitle: create.hasPageTitle,
+        hasReturnHome: create.hasReturnHome,
+        hasHelpEntry: create.hasHelpEntry,
+      }),
+    },
+    {
+      points: 15,
+      passed: Boolean(create.hasLeftFlow) && Boolean(create.hasLeftUtility),
+      reason: '左侧流程栏、创建记录、草稿箱、导入记录或帮助区不完整。',
+      evidence: JSON.stringify({ hasLeftFlow: create.hasLeftFlow, hasLeftUtility: create.hasLeftUtility }),
+    },
+    {
+      points: 12,
+      passed: Boolean(create.hasStepStrip) && Boolean(create.hasTypePanel),
+      reason: '主区域标题、步骤条或项目类型选择区不完整。',
+      evidence: JSON.stringify({ hasStepStrip: create.hasStepStrip, hasTypePanel: create.hasTypePanel }),
+    },
+    {
+      points: 20,
+      passed:
+        Number(create.typeCardCount) >= 8 &&
+        Boolean(create.hasShortDramaTestId) &&
+        Boolean(create.hasDefaultShortDramaSelected) &&
+        Boolean(create.hasTypeFrequencies) &&
+        Boolean(create.hasNovel) &&
+        Boolean(create.hasShortDrama) &&
+        Boolean(create.hasBusinessCopy) &&
+        Boolean(create.hasDocument) &&
+        Boolean(create.hasExtraTypes),
+      reason: '项目类型卡片不完整，或短剧项目未默认选中。',
+      evidence: JSON.stringify({
+        typeCardCount: create.typeCardCount,
+        hasShortDramaTestId: create.hasShortDramaTestId,
+        hasDefaultShortDramaSelected: create.hasDefaultShortDramaSelected,
+        hasTypeFrequencies: create.hasTypeFrequencies,
+        hasExtraTypes: create.hasExtraTypes,
+      }),
+    },
+    {
+      points: 12,
+      passed: Boolean(create.hasTemplateStrip),
+      reason: '快速选择已有模板区域不完整。',
+      evidence: JSON.stringify({ hasTemplateStrip: create.hasTemplateStrip }),
+    },
+    {
+      points: 12,
+      passed: Boolean(create.hasRightInfo),
+      reason: '右侧类型说明、使用频率排行、快捷键提示或创建记录不完整。',
+      evidence: JSON.stringify({ hasRightInfo: create.hasRightInfo }),
+    },
+    {
+      points: 10,
+      passed: Boolean(create.hasBottomActions),
+      reason: '底部默认类型、取消或下一步主按钮不完整。',
+      evidence: JSON.stringify({ hasBottomActions: create.hasBottomActions }),
+    },
+    {
+      points: 7,
+      passed:
+        !create.hasTechnicalText &&
+        Boolean(create1440) &&
+        Boolean(create1366) &&
+        !create1440.failed &&
+        !create1366.failed &&
+        !create1440.isBlankPage &&
+        !create1366.isBlankPage &&
+        !create1440.horizontalOverflow &&
+        !create1366.horizontalOverflow,
+      reason: '新建页存在技术字段、空白页、访问失败或横向溢出。',
+      evidence: JSON.stringify({
+        hasTechnicalText: create.hasTechnicalText,
+        create1440: create1440
+          ? { failed: create1440.failed, blank: create1440.isBlankPage, overflow: create1440.horizontalOverflow }
+          : null,
+        create1366: create1366
+          ? { failed: create1366.failed, blank: create1366.isBlankPage, overflow: create1366.horizontalOverflow }
+          : null,
+      }),
+    },
+  ];
+
+  let score = 0;
+  for (const check of checks) {
+    if (check.passed) {
+      score += check.points;
+    } else {
+      deductions.push({
+        dimension: '新建页专项',
+        reason: check.reason,
+        pointsLost: check.points,
+        evidence: check.evidence,
+      });
+    }
+  }
+
+  return {
+    score: clampScore(score, 0, 100),
+    deductions: deductions.sort((left, right) => right.pointsLost - left.pointsLost),
+  };
+}
+
+function scoreUserProfilePage() {
+  const deductions = [];
+  const profile1440 = routeResult('profile', '1440x900');
+  const profile1366 = routeResult('profile', '1366x768');
+  const profileText = [
+    profile1440?.diagnostics?.bodyTextSample ?? '',
+    profile1366?.diagnostics?.bodyTextSample ?? '',
+  ].join('\n');
+  const visual = profile1440?.diagnostics?.visual ?? profile1366?.diagnostics?.visual ?? {};
+
+  const checks = [
+    {
+      points: 25,
+      passed:
+        routeUsable('profile') &&
+        Boolean(profile1440?.screenshotSaved) &&
+        Boolean(profile1366?.screenshotSaved),
+      reason: '用户资料页未在两个核心视口完整打开或截图缺失。',
+      evidence: routeEvidence('profile'),
+    },
+    {
+      points: 25,
+      passed:
+        /用户资料/.test(profileText) &&
+        /用户信息/.test(profileText) &&
+        /使用偏好与账户状态/.test(profileText),
+      reason: '用户资料页缺少用户信息或使用偏好与账户状态内容。',
+      evidence: profileText.slice(0, 260),
+    },
+    {
+      points: 20,
+      passed:
+        Boolean(visual.darkBase) &&
+        Number(visual.cardCount) >= 2 &&
+        Number(visual.grayCardRatio) >= 0.65,
+      reason: '用户资料页暗色底、灰卡片或卡片数量不符合设计参考。',
+      evidence: JSON.stringify({
+        darkBase: visual.darkBase,
+        cardCount: visual.cardCount,
+        grayCardRatio: visual.grayCardRatio,
+      }),
+    },
+    {
+      points: 15,
+      passed:
+        Boolean(profile1440) &&
+        Boolean(profile1366) &&
+        !profile1440.horizontalOverflow &&
+        !profile1366.horizontalOverflow,
+      reason: '用户资料页在 1440x900 或 1366x768 出现横向溢出。',
+      evidence: JSON.stringify({
+        profile1440: profile1440
+          ? { overflow: profile1440.horizontalOverflow, width: profile1440.width }
+          : null,
+        profile1366: profile1366
+          ? { overflow: profile1366.horizontalOverflow, width: profile1366.width }
+          : null,
+      }),
+    },
+    {
+      points: 15,
+      passed:
+        Boolean(profile1440) &&
+        Boolean(profile1366) &&
+        !profile1440.failed &&
+        !profile1366.failed &&
+        !profile1440.isBlankPage &&
+        !profile1366.isBlankPage &&
+        profile1440.hasTextMasterKeyword &&
+        profile1366.hasTextMasterKeyword,
+      reason: '用户资料页访问失败、空白或缺少 Text Master 识别信息。',
+      evidence: routeEvidence('profile'),
+    },
+  ];
+
+  let score = 0;
+  for (const check of checks) {
+    if (check.passed) {
+      score += check.points;
+    } else {
+      deductions.push({
+        dimension: '用户资料页专项',
         reason: check.reason,
         pointsLost: check.points,
         evidence: check.evidence,
@@ -2047,7 +2725,7 @@ function scoreStandaloneApp(deductions) {
 }
 
 function scorePageCompleteness(deductions) {
-  const requiredPages = ['home', 'create', 'workspace', 'templates', 'exports', 'settings'];
+  const requiredPages = ['home', 'create', 'workspace', 'templates', 'exports', 'settings', 'profile'];
   const pageChecks = requiredPages.map((key) => ({
     points: 2,
     passed: routeUsable(key) && routeHasMainAction(key),
@@ -2060,13 +2738,13 @@ function scorePageCompleteness(deductions) {
     [
       ...pageChecks,
       {
-        points: 4,
+        points: 3,
         passed: requiredPages.every((key) => routeNotBlank(key)),
         reason: '存在空白或疑似空白页面。',
         evidence: blankPageEvidence(requiredPages),
       },
       {
-        points: 4,
+        points: 3,
         passed: requiredPages.every((key) => routeHasMainAction(key)),
         reason: '部分页面缺少主要操作入口。',
         evidence: mainActionEvidence(requiredPages),
@@ -2191,9 +2869,9 @@ function scoreVisualStyle(deductions) {
       },
       {
         points: 3,
-        passed: auditState.overflowReports.length === 0,
-        reason: '存在明显横向溢出。',
-        evidence: `${auditState.overflowReports.length} overflow reports`,
+        passed: auditState.overflowReports.length === 0 && auditState.viewportFitReports.length === 0,
+        reason: '存在明显页面级溢出或未完整适配视口。',
+        evidence: `${auditState.overflowReports.length} overflow reports; ${auditState.viewportFitReports.length} viewport fit reports`,
       },
       {
         points: 2,
@@ -2388,7 +3066,7 @@ function visualRatioEvidence(key, visualResults) {
 
 function viewportUsable(viewport) {
   const items = auditState.routeStatuses.filter((item) => item.viewport === viewport);
-  return items.length > 0 && items.every((item) => item.statusOk && !item.failed && !item.isBlankPage);
+  return items.length > 0 && items.every((item) => item.statusOk && !item.failed && !item.isBlankPage && item.viewportFits);
 }
 
 function viewportEvidence(viewport) {
@@ -2454,6 +3132,7 @@ async function inspectBrainHubAdapter() {
     'src/modules/text-master/pages/Templates.vue',
     'src/modules/text-master/pages/Exports.vue',
     'src/modules/text-master/pages/Settings.vue',
+    'src/modules/text-master/pages/UserProfile.vue',
   ].map(readTextIfExists);
 
   return {
@@ -2472,9 +3151,11 @@ async function inspectBrainHubAdapter() {
 async function writeAllReports() {
   recalculateSummary();
   auditState.score = computeDesignScore();
+  const designReferenceScore = buildDesignReferenceScore(auditState.score);
   await writeJson(REPORT_JSON, {
     summary: summaryObject(),
     score: auditState.score,
+    designReferenceScore,
     results: auditState.results,
     screenshots: auditState.screenshots,
     artifacts: artifactObject(),
@@ -2487,6 +3168,7 @@ async function writeAllReports() {
   await writeJson(ROUTE_STATUS_JSON, auditState.routeStatuses);
   await writeJson(CONSOLE_ERRORS_JSON, auditState.consoleErrors);
   await writeJson(OVERFLOW_REPORT_JSON, auditState.overflowReports);
+  await writeJson(VIEWPORT_FIT_REPORT_JSON, auditState.viewportFitReports);
   await writeJson(BRAIN_HUB_REPORT_JSON, auditState.brainHubAdapter);
   await fs.promises.writeFile(REPORT_MD, buildMarkdownReport(), 'utf8');
 }
@@ -2539,6 +3221,7 @@ function buildMarkdownReport() {
             item.hasTextMasterKeyword ? 'yes' : 'no',
             item.hasMainAction ? 'yes' : 'no',
             item.screenshotSaved ? 'yes' : 'no',
+            item.fullPageScreenshotSaved ? 'yes' : 'no',
           ].join(' | '),
         )
         .join('\n')
@@ -2586,6 +3269,15 @@ function buildMarkdownReport() {
         .join('\n\n')
     : 'No functional checks executed.';
   const score = auditState.score ?? createEmptyScore();
+  const designReference = buildDesignReferenceScore(score);
+  const designReferenceRows = designReference.pages
+    .map(
+      (page) =>
+        `${page.key} | ${page.score}/100 | ${page.targetDesignImage.map((file) => `\`${file}\``).join(', ')} | ${
+          page.currentScreenshot ? `\`${page.currentScreenshot}\`` : '(missing)'
+        }`,
+    )
+    .join('\n');
   const scoreDeductions = score.deductions.length
     ? score.deductions
         .slice(0, 10)
@@ -2604,6 +3296,18 @@ function buildMarkdownReport() {
         )
         .join('\n')
     : '- No home page deductions.';
+  const createPageDeductions = score.createPageDeductions?.length
+    ? score.createPageDeductions
+        .slice(0, 10)
+        .map((item) => `- ${item.dimension}: -${item.pointsLost}, ${item.reason} Evidence: ${item.evidence}`)
+        .join('\n')
+    : '- No create page deductions.';
+  const userProfileDeductions = score.userProfileDeductions?.length
+    ? score.userProfileDeductions
+        .slice(0, 10)
+        .map((item) => `- ${item.dimension}: -${item.pointsLost}, ${item.reason} Evidence: ${item.evidence}`)
+        .join('\n')
+    : '- No user profile page deductions.';
   const priorityFixes = buildPriorityFixes(score)
     .map((item) => `- ${item}`)
     .join('\n');
@@ -2629,8 +3333,11 @@ function buildMarkdownReport() {
     '## Summary',
     '',
     `- Screenshots: ${auditState.screenshotCount}`,
+    `- Viewport screenshots: ${countViewportScreenshots()}`,
+    `- Full-page screenshots: ${countFullPageScreenshots()}`,
     `- Console errors: ${auditState.consoleErrorCount}`,
     `- Horizontal overflow pages: ${auditState.overflowPageCount}`,
+    `- Viewport fit issues: ${auditState.viewportFitIssueCount}`,
     `- Failed page visits: ${auditState.failedPageCount}`,
     `- Blank pages: ${auditState.blankPageCount}`,
     `- Functional passed: ${auditState.functionalSummary.passed}`,
@@ -2648,8 +3355,18 @@ function buildMarkdownReport() {
     `- 视觉风格: ${score.visualStyle}/20`,
     `- 生产链路: ${score.productionFlow}/20`,
     `- 首页专项分数 homePageScore: ${score.homePageScore}/100`,
+    `- 新建页专项分数 createPageScore: ${score.createPageScore}/100`,
+    `- 用户资料页专项分数 userProfileDesignScore: ${score.userProfileDesignScore}/100`,
     `- 总分: ${score.total}/100`,
     `- 等级: ${score.level}`,
+    '',
+    '## 设计图对照评分',
+    '',
+    `- 设计参考总分: ${designReference.total}/100`,
+    '',
+    'Page | Score | Target design image | Current screenshot',
+    '--- | --- | --- | ---',
+    designReferenceRows,
     '',
     '### 主要扣分原因',
     '',
@@ -2658,6 +3375,14 @@ function buildMarkdownReport() {
     '### 首页专项扣分原因',
     '',
     homePageDeductions,
+    '',
+    '### 新建页专项扣分原因',
+    '',
+    createPageDeductions,
+    '',
+    '### 用户资料页专项扣分原因',
+    '',
+    userProfileDeductions,
     '',
     '### 最优先整改项',
     '',
@@ -2671,8 +3396,8 @@ function buildMarkdownReport() {
     '',
     auditState.routeStatuses.length
       ? [
-          'Key | Viewport | URL | Status | Failed | Blank | Text Master | Main action | Screenshot',
-          '--- | --- | --- | --- | --- | --- | --- | --- | ---',
+          'Key | Viewport | URL | Status | Failed | Blank | Text Master | Main action | Viewport screenshot | Full-page screenshot',
+          '--- | --- | --- | --- | --- | --- | --- | --- | --- | ---',
           rows,
         ].join('\n')
       : 'No route visits executed.',
@@ -2716,6 +3441,18 @@ function buildPriorityFixes(score) {
       .map((item) => `${item.dimension}: ${item.reason}`);
   }
 
+  if (score.createPageScore < 95 && score.createPageDeductions?.length) {
+    return score.createPageDeductions
+      .slice(0, 3)
+      .map((item) => `${item.dimension}: ${item.reason}`);
+  }
+
+  if (score.userProfileDesignScore < 95 && score.userProfileDeductions?.length) {
+    return score.userProfileDeductions
+      .slice(0, 3)
+      .map((item) => `${item.dimension}: ${item.reason}`);
+  }
+
   if (!score.deductions.length) {
     return ['保留当前结构，进入细节视觉精修和真实功能接入。'];
   }
@@ -2742,7 +3479,15 @@ function buildNextStepSuggestions(score) {
     suggestions.push('把创作设定到导出的生产步骤继续从 Mock 推进到可验证链路。');
   }
   if (score.homePageScore < 95) {
-    suggestions.push('优先补齐首页导航、Hero、生产链路、任务卡和模板区，直到 homePageScore 达到 95 以上。');
+    suggestions.push('优先补齐首页导航、Hero、快速模板、今日任务、运营栏目和页脚状态，直到 homePageScore 达到 95 以上。');
+  }
+
+  if (score.createPageScore < 95) {
+    suggestions.push('优先补齐新建页导航、流程栏、项目类型卡、模板条、右侧说明和底部创建操作，直到 createPageScore 达到 95 以上。');
+  }
+
+  if (score.userProfileDesignScore < 95) {
+    suggestions.push('补齐用户资料页路由、用户信息卡和使用偏好账户状态区，直到 userProfileDesignScore 达到 95 以上。');
   }
 
   if (!suggestions.length) {
@@ -2769,9 +3514,19 @@ function buildManualGuide(reason) {
       VIEWPORTS.map((viewport) => `- ${page.key}-${viewport.name}.png`),
     ),
     '',
+    '## Required full-page screenshots',
+    '',
+    ...INDEPENDENT_PAGES.flatMap((page) =>
+      VIEWPORTS.map((viewport) => `- ${page.key}-${viewport.name}-fullpage.png`),
+    ),
+    '',
     '## Workspace internal screenshots',
     '',
     ...WORKSPACE_STEPS.map((step) => `- ${step.key}-1440x900.png`),
+    '',
+    '## Workspace internal full-page screenshots',
+    '',
+    ...WORKSPACE_STEPS.map((step) => `- ${step.key}-1440x900-fullpage.png`),
     '',
   ].join('\n');
 }
@@ -2792,8 +3547,11 @@ function summaryObject() {
     startedDevServer: auditState.startedDevServer,
     manualReason: auditState.manualReason,
     screenshotCount: auditState.screenshotCount,
+    viewportScreenshotCount: countViewportScreenshots(),
+    fullPageScreenshotCount: countFullPageScreenshots(),
     consoleErrorCount: auditState.consoleErrorCount,
     overflowPageCount: auditState.overflowPageCount,
+    viewportFitIssueCount: auditState.viewportFitIssueCount,
     failedPageCount: auditState.failedPageCount,
     blankPageCount: auditState.blankPageCount,
     functionalSummary: auditState.functionalSummary,
@@ -2810,6 +3568,7 @@ function artifactObject() {
     routeStatus: path.relative(ROOT_DIR, ROUTE_STATUS_JSON).replace(/\\/g, '/'),
     consoleErrors: path.relative(ROOT_DIR, CONSOLE_ERRORS_JSON).replace(/\\/g, '/'),
     overflowReport: path.relative(ROOT_DIR, OVERFLOW_REPORT_JSON).replace(/\\/g, '/'),
+    viewportFitReport: path.relative(ROOT_DIR, VIEWPORT_FIT_REPORT_JSON).replace(/\\/g, '/'),
     brainHubAdapterReport: path.relative(ROOT_DIR, BRAIN_HUB_REPORT_JSON).replace(/\\/g, '/'),
     zip: path.relative(ROOT_DIR, ZIP_PATH).replace(/\\/g, '/'),
   };
@@ -2826,6 +3585,7 @@ async function createAuditZip() {
     ROUTE_STATUS_JSON,
     CONSOLE_ERRORS_JSON,
     OVERFLOW_REPORT_JSON,
+    VIEWPORT_FIT_REPORT_JSON,
     BRAIN_HUB_REPORT_JSON,
   ];
 

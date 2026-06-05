@@ -1,11 +1,18 @@
-export type ExportFormat = 'markdown' | 'txt' | 'json';
+export type ExportFormat =
+  | 'markdown'
+  | 'txt'
+  | 'json'
+  | 'text-master-json'
+  | 'media-master-json'
+  | 'novel-master-json';
 
 export type ExportRequest = {
   projectId: string;
   documentId?: string;
   format: ExportFormat;
   fileName: string;
-  content: string;
+  content?: string;
+  contentScope?: string[];
 };
 
 export type ExportResult = {
@@ -15,4 +22,10 @@ export type ExportResult = {
   fileName: string;
   content: string;
   createdAt: string;
+};
+
+export type ExportRecord = ExportResult & {
+  documentId?: string;
+  versionId?: string;
+  contentScope: string[];
 };

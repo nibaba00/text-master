@@ -8,7 +8,8 @@
     "desktop": "node scripts/start-text-master-desktop.mjs",
     "typecheck": "vue-tsc --noEmit",
     "build": "vite build",
-    "audit:text-master:visual": "node scripts/audit-text-master-visual.mjs"
+    "audit:text-master:visual": "node scripts/audit-text-master-visual.mjs",
+    "audit:text-master:mvp": "node scripts/audit-text-master-mvp.mjs"
   },
   "dependencies": {
     "vue": "^3.5.0",

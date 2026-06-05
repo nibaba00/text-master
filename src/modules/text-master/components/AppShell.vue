@@ -9,7 +9,7 @@
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
-  background: #050506;
-  color: #f4f4f5;
+  background: var(--tm-bg);
+  color: var(--tm-text);
 }
 </style>

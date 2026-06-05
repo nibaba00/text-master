@@ -6,7 +6,13 @@ export type BrainHubManifestCapability =
   | 'mock-ai'
   | 'local-export'
   | 'project-sync-stub'
-  | 'usage-reporting-stub';
+  | 'usage-reporting-stub'
+  | 'text.project.create'
+  | 'text.outline.generate'
+  | 'text.content.generate'
+  | 'text.rewrite'
+  | 'text.review'
+  | 'text.export';
 
 export type BrainHubOptionalPermission =
   | 'profile:read'
@@ -46,6 +52,12 @@ export const textMasterBrainHubManifest: BrainHubAppManifest = {
     'local-export',
     'project-sync-stub',
     'usage-reporting-stub',
+    'text.project.create',
+    'text.outline.generate',
+    'text.content.generate',
+    'text.rewrite',
+    'text.review',
+    'text.export',
   ],
   optionalPermissions: [
     'profile:read',

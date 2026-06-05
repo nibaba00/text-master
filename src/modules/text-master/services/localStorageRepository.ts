@@ -67,6 +67,25 @@ export function writeCollection<T>(
   }
 }
 
+export function replaceCollection<T>(
+  key: string,
+  value: T[],
+  service: string,
+): void {
+  writeCollection(key, cloneValue(value), service);
+}
+
+export function removeStoredCollection(key: string): void {
+  const storage = getLocalStorage();
+
+  if (storage) {
+    storage.removeItem(key);
+    return;
+  }
+
+  memoryStorage.delete(key);
+}
+
 export function createTextMasterId(prefix: string): string {
   const randomPart = Math.random().toString(36).slice(2, 8);
 

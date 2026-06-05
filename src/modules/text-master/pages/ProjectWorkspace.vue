@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AiActionPanel from '../components/AiActionPanel.vue';
+import TopNav from '../components/TopNav.vue';
 import WorkspaceHeader from '../components/WorkspaceHeader.vue';
 import WorkspaceSidebar from '../components/WorkspaceSidebar.vue';
 import {
@@ -82,6 +83,7 @@ type WorkflowCard = {
   status: string;
   detail: string;
   score: number;
+  tone?: 'success' | 'running' | 'warning' | 'idle';
 };
 
 const reviewTypes: ReviewType[] = [
@@ -203,6 +205,7 @@ const operationLabels: Record<TextVersion['operation'], string> = {
   repair: '修复',
   manual_edit: '手动编辑',
   export: '导出',
+  restore: '恢复',
 };
 
 const route = useRoute();
@@ -298,6 +301,7 @@ const routeProjectId = computed(() => {
 });
 
 const projectTitle = computed(() => project.value?.title ?? '加载项目中');
+const projectPathLabel = computed(() => `项目中心 / ${projectTitle.value || routeProjectId.value || '当前项目'}`);
 const projectProgress = computed(() => project.value?.progress ?? 0);
 const projectStatus = computed(() => project.value?.status ?? 'unknown');
 const autoSaveEnabled = computed(() => project.value?.settings.autoSave ?? true);
@@ -364,7 +368,7 @@ const selectedExportTargetLabel = computed(
       ?.label ?? '未选择',
 );
 const productionDocumentOptions = computed(() => {
-  const labels = ['EP01', 'EP02', 'EP03'];
+  const labels = ['EP01', 'EP02', 'EP03', 'EP04'];
   const options = labels.map((label, index) => {
     const document = editableDocuments.value[index];
     return {
@@ -455,6 +459,62 @@ const workflowCards = computed<WorkflowCard[]>(() => [
     status: exportDocuments.value.length > 0 ? '已导出' : '待导出',
     detail: `${exportDocuments.value.length} 个导出文档`,
     score: exportDocuments.value.length > 0 ? 100 : 10,
+  },
+]);
+const overviewPendingItems = computed(() => {
+  const items: string[] = [];
+
+  if (settingCompleteness.value < 100) {
+    items.push('补齐创作设定，锁定风格与审核规则');
+  }
+  if (outlineDocuments.value.length === 0) {
+    items.push('进入大纲工厂，生成可执行结构');
+  }
+  if (reviewDocuments.value.length === 0) {
+    items.push('运行项目审核，检查前后矛盾与风险');
+  }
+  if (exportDocuments.value.length === 0) {
+    items.push('完成导出中心版本，形成可交付稿');
+  }
+
+  return items.slice(0, 3);
+});
+const overviewFlowCards = computed(() => [
+  {
+    title: '创作设定',
+    status: settingCompleteness.value >= 80 ? '已完成' : '待处理',
+    detail: `${settingCompleteness.value}% 完整度`,
+    tone: settingCompleteness.value >= 80 ? 'success' : 'warning',
+  },
+  {
+    title: '资料库',
+    status: materials.value.length > 0 ? '已完成' : '待开始',
+    detail: `${materials.value.length} 条资料`,
+    tone: materials.value.length > 0 ? 'success' : 'idle',
+  },
+  {
+    title: '大纲工厂',
+    status: outlineDocuments.value.length > 0 ? '运行中' : '待开始',
+    detail: `${outlineDocuments.value.length} 个大纲文档`,
+    tone: outlineDocuments.value.length > 0 ? 'running' : 'idle',
+  },
+  {
+    title: '正文生产',
+    status: editableDocuments.value.length > 0 ? '已完成' : '待开始',
+    detail: `${editableDocuments.value.length} 个正文相关文档`,
+    tone: editableDocuments.value.length > 0 ? 'success' : 'idle',
+  },
+  {
+    title: '审核工厂',
+    status: reviewDocuments.value.length > 0 ? '待处理' : '待开始',
+    detail: `${reviewDocuments.value.length} 条审核记录`,
+    tone: reviewDocuments.value.length > 0 ? 'warning' : 'idle',
+  },
+  {
+    title: '导出中心',
+    status: exportDocuments.value.length > 0 ? '已完成' : '待开始',
+    detail: `${exportDocuments.value.length} 个导出文件`,
+    tone: exportDocuments.value.length > 0 ? 'success' : 'idle',
   },
 ]);
 const nextRecommendedAction = computed(() => {
@@ -1210,6 +1270,9 @@ function downloadExportFile(
     markdown: 'text/markdown;charset=utf-8',
     txt: 'text/plain;charset=utf-8',
     json: 'application/json;charset=utf-8',
+    'text-master-json': 'application/json;charset=utf-8',
+    'media-master-json': 'application/json;charset=utf-8',
+    'novel-master-json': 'application/json;charset=utf-8',
   };
   const blob = new Blob([content], { type: mimeTypes[format] });
   const url = URL.createObjectURL(blob);
@@ -1292,28 +1355,123 @@ function formatUpdatedAt(value: string): string {
 
 <template>
   <main class="tm-workspace-page">
+    <TopNav />
+
     <WorkspaceHeader
+      :project-path="projectPathLabel"
       :project-title="projectTitle"
       :auto-save-enabled="autoSaveEnabled"
       :updated-at="updatedAtLabel"
     />
 
-    <section class="tm-workspace-body" aria-label="Text Master workspace">
+    <section class="tm-workspace-body" aria-label="Text Master workspace" data-testid="text-master-workspace">
       <WorkspaceSidebar
+        data-testid="text-master-sidebar"
         :items="workspaceNavItems"
         :active-step="activeStep"
         @select="setActiveStep"
       />
 
-      <section class="tm-workspace-main">
-        <div class="tm-workspace-notice" aria-live="polite">
+      <section class="tm-workspace-main" data-testid="text-master-main">
+        <div v-if="activeStep !== 'overview'" class="tm-workspace-notice" aria-live="polite">
           {{ lastAction }}
         </div>
 
         <p v-if="loadError" class="tm-error">{{ loadError }}</p>
 
         <template v-else>
-          <article v-if="activeStep === 'overview'" class="tm-workspace-card">
+          <article v-if="activeStep === 'overview'" class="tm-workspace-card" data-testid="workspace-overview">
+            <section class="tm-overview-shell">
+              <header class="tm-overview-title tm-overview-hero">
+                <div>
+                  <p>Project Overview</p>
+                  <h2>项目总览</h2>
+                  <span>只展示决策信息和下一步动作，不承载长篇编辑。</span>
+                </div>
+                <strong>{{ getStatusLabel(projectStatus) }}</strong>
+              </header>
+
+              <section class="tm-overview-metrics" aria-label="Overview metrics">
+                <article>
+                  <span>项目进度</span>
+                  <strong>{{ projectProgress }}%</strong>
+                  <meter min="0" max="100" :value="projectProgress" />
+                  <small>生产中</small>
+                </article>
+                <article>
+                  <span>项目类型</span>
+                  <strong>{{ getProjectTypeLabel(project?.type) }}</strong>
+                  <small>生产模板</small>
+                </article>
+                <article>
+                  <span>总字数</span>
+                  <strong>{{ project?.wordCount.toLocaleString() ?? 0 }}</strong>
+                  <small>已生成</small>
+                </article>
+                <article>
+                  <span>待处理事项</span>
+                  <strong>{{ overviewPendingItems.length }}</strong>
+                  <small>审核问题 / 阻塞项</small>
+                </article>
+              </section>
+
+              <section class="tm-overview-summary">
+                <p>项目摘要</p>
+                <h3>{{ projectTitle }}</h3>
+                <div class="tm-overview-summary-meta">
+                  <span>项目名称：{{ projectTitle }}</span>
+                  <span>项目类型：{{ getProjectTypeLabel(project?.type) }}</span>
+                </div>
+                <p class="tm-workspace-copy">
+                  {{ project?.summary || '当前项目尚未填写摘要，请先补齐创作设定后继续推进。' }}
+                </p>
+              </section>
+
+              <section class="tm-overview-production">
+                <header>
+                  <div>
+                    <p>Production Stages</p>
+                    <h3>生产阶段</h3>
+                  </div>
+                  <span>阶段状态用于判断下一步，不展开正文编辑。</span>
+                </header>
+
+                <div class="tm-overview-flow">
+                  <article v-for="card in overviewFlowCards" :key="card.title" :class="['tm-flow-card', `tone-${card.tone}`]">
+                    <div>
+                      <strong>{{ card.title }}</strong>
+                      <em>{{ card.status }}</em>
+                    </div>
+                    <p>{{ card.detail }}</p>
+                  </article>
+                </div>
+              </section>
+
+              <section class="tm-overview-next">
+                <article class="tm-inner-card tm-pending-card">
+                  <header>
+                    <p>待处理事项</p>
+                    <h3>下一步动作</h3>
+                  </header>
+                  <ul>
+                    <li v-for="item in overviewPendingItems" :key="item">{{ item }}</li>
+                    <li v-if="overviewPendingItems.length === 0">当前暂无明显阻塞项，可以继续推进生产链路。</li>
+                  </ul>
+                </article>
+                <article class="tm-inner-card next-action">
+                  <header>
+                    <p>Recommended</p>
+                    <h3>下一步推荐操作</h3>
+                  </header>
+                  <p>{{ nextRecommendedAction }}</p>
+                  <button type="button" @click="lastAction = nextRecommendedAction">
+                    设为当前任务
+                  </button>
+                </article>
+              </section>
+
+            </section>
+
             <header class="tm-section-header">
               <div>
                 <p>Overview</p>
@@ -1400,194 +1558,225 @@ function formatUpdatedAt(value: string): string {
             </section>
           </article>
 
-          <article v-if="activeStep === 'settings'" class="tm-workspace-card">
+          <article v-if="activeStep === 'settings'" class="tm-workspace-card" data-testid="workspace-settings">
             <header class="tm-section-header">
               <div>
                 <p>Settings</p>
                 <h2>创作设定</h2>
               </div>
-              <strong>{{ settingCompleteness }}% 完整</strong>
+              <span class="tm-completeness-pill">
+                <span class="tm-pill-dot" :class="settingCompleteness >= 80 ? 'done' : settingCompleteness >= 40 ? 'warn' : 'idle'" />
+                {{ settingCompleteness }}% 完整度
+              </span>
             </header>
 
-            <section class="tm-settings-grid">
-              <article class="tm-inner-card">
-                <header>
-                  <p>Base</p>
-                  <h3>基础设定卡</h3>
-                </header>
-                <dl>
-                  <div>
-                    <dt>目标读者</dt>
-                    <dd>
-                      {{
-                        project?.settings.targetAudience ||
-                        getSetupValue(['targetReader', 'targetAudience'])
-                      }}
-                    </dd>
+            <div class="tm-settings-grid-v2">
+              <!-- Row 1: 基础设定 (wide) + 风格设定 -->
+              <div class="tm-settings-row">
+                <article class="tm-settings-card-v2 tm-settings-card-wide">
+                  <header>
+                    <p>Base</p>
+                    <h3>基础设定</h3>
+                  </header>
+                  <div class="tm-settings-fields">
+                    <div class="tm-settings-text-block">
+                      <strong>目标读者</strong>
+                      <p>{{ project?.settings.targetAudience || getSetupValue(['targetReader', 'targetAudience']) || '请设定目标读者群体' }}</p>
+                    </div>
+                    <div class="tm-settings-text-block">
+                      <strong>项目摘要</strong>
+                      <p>{{ project?.summary || '请先补齐项目摘要，再继续推进后续链路。' }}</p>
+                    </div>
+                    <div class="tm-settings-text-block">
+                      <strong>生成策略</strong>
+                      <p>{{ project?.settings.generationStrategy || '默认生成策略' }}</p>
+                    </div>
                   </div>
-                  <div>
-                    <dt>模板</dt>
-                    <dd>{{ project?.settings.templateId || '未使用模板' }}</dd>
+                </article>
+
+                <article class="tm-settings-card-v2">
+                  <header>
+                    <p>Style</p>
+                    <h3>风格设定</h3>
+                  </header>
+                  <div class="tm-settings-long-text">
+                    <p>{{ project?.settings.tone || '以低饱和、专业、可执行为主的文本风格。' }}</p>
                   </div>
-                  <div>
-                    <dt>生成策略</dt>
-                    <dd>{{ project?.settings.generationStrategy || 'expand' }}</dd>
+                  <div class="tm-chip-list">
+                    <span v-for="tag in project?.settings.styleTags ?? []" :key="tag">{{ tag }}</span>
+                    <span v-if="!project?.settings.styleTags?.length" class="tm-chip-muted">默认风格</span>
                   </div>
-                </dl>
-              </article>
+                </article>
+              </div>
 
-              <article class="tm-inner-card">
-                <header>
-                  <p>Style</p>
-                  <h3>风格设定卡</h3>
-                </header>
-                <div class="tm-chip-list">
-                  <span
-                    v-for="tag in project?.settings.styleTags ?? []"
-                    :key="tag"
-                  >
-                    {{ tag }}
-                  </span>
-                  <span v-if="!project?.settings.styleTags?.length">
-                    {{ project?.settings.tone || 'clear' }}
-                  </span>
-                </div>
-              </article>
+              <!-- Row 2: 角色设定 + 世界观设定 (both long-text cards) -->
+              <div class="tm-settings-row">
+                <article class="tm-settings-card-v2">
+                  <header>
+                    <p>Character</p>
+                    <h3>角色设定</h3>
+                  </header>
+                  <div class="tm-settings-long-text">
+                    <p>{{ getSetupValue(['protagonist']) || '角色目标、动机、阻力和关系网会在这里集中呈现。' }}</p>
+                  </div>
+                </article>
 
-              <article class="tm-inner-card">
-                <header>
-                  <p>Character</p>
-                  <h3>角色设定卡</h3>
-                </header>
-                <p>{{ getSetupValue(['protagonist']) }}</p>
-              </article>
+                <article class="tm-settings-card-v2">
+                  <header>
+                    <p>World</p>
+                    <h3>世界观设定</h3>
+                  </header>
+                  <div class="tm-settings-long-text">
+                    <p>{{ getSetupValue(['worldview', 'existingMaterials', 'structureRequirement']) || '世界规则、边界条件、时间线和限制项会集中展示。' }}</p>
+                  </div>
+                </article>
+              </div>
 
-              <article class="tm-inner-card">
-                <header>
-                  <p>World</p>
-                  <h3>世界观设定卡</h3>
-                </header>
-                <p>{{ getSetupValue(['worldview', 'existingMaterials', 'structureRequirement']) }}</p>
-              </article>
+              <!-- Row 3: 已锁定项 (wide) -->
+              <div class="tm-settings-row">
+                <article class="tm-settings-card-v2 tm-settings-card-wide tm-settings-locks-card">
+                  <header>
+                    <p>Locked</p>
+                    <h3>已锁定设定</h3>
+                  </header>
+                  <div class="tm-chip-list">
+                    <span v-for="item in lockedSettings" :key="item" class="tm-lock-chip">
+                      <span class="tm-lock-icon">🔒</span>
+                      {{ item }}
+                    </span>
+                    <span v-if="lockedSettings.length === 0" class="tm-chip-muted">暂无锁定项 — 完成基础设定后可锁定核心规则</span>
+                  </div>
+                </article>
+              </div>
 
-              <article class="tm-inner-card">
-                <header>
-                  <p>Locked</p>
-                  <h3>设定锁定项</h3>
-                </header>
-                <div class="tm-chip-list">
-                  <span v-for="item in lockedSettings" :key="item">
-                    {{ item }}
-                  </span>
-                  <span v-if="lockedSettings.length === 0">暂无锁定项</span>
-                </div>
-              </article>
+              <!-- AI 操作区 -->
+              <div class="tm-settings-ai-row">
+                <article class="tm-settings-card-v2 tm-settings-ai-card">
+                  <header>
+                    <p>AI Actions</p>
+                    <h3>AI 操作</h3>
+                  </header>
+                  <div class="tm-settings-actions">
+                    <button type="button" class="tm-primary-action" @click="runSettingsMock">补全设定</button>
+                    <button type="button" @click="settingsFeedback = '正在检查设定冲突，Mock 结果会先显示在右侧。'">
+                      <span class="tm-btn-icon">⚡</span> 检查冲突
+                    </button>
+                    <button type="button" @click="settingsFeedback = '核心设定已锁定，后续生成将优先遵循当前设定。'">
+                      <span class="tm-btn-icon">🔒</span> 锁定核心设定
+                    </button>
+                  </div>
+                  <p class="tm-feedback">{{ settingsFeedback }}</p>
+                </article>
 
-              <article class="tm-inner-card tm-completeness-card">
-                <header>
-                  <p>Completeness</p>
-                  <h3>设定完整度</h3>
-                </header>
-                <strong>{{ settingCompleteness }}%</strong>
-                <meter min="0" max="100" :value="settingCompleteness" />
-                <button type="button" @click="runSettingsMock">
-                  AI 补全设定 Mock
-                </button>
-                <p class="tm-feedback">{{ settingsFeedback }}</p>
-              </article>
-            </section>
+                <article class="tm-settings-card-v2">
+                  <header>
+                    <p>Checklist</p>
+                    <h3>锁定说明</h3>
+                  </header>
+                  <ul class="tm-settings-bullets">
+                    <li v-for="item in lockedSettings.slice(0, 4)" :key="item">
+                      <span class="tm-bullet-marker" />
+                      {{ item }}
+                    </li>
+                    <li v-if="lockedSettings.length === 0" class="tm-bullet-hint">设定尚未锁定，建议先完成基础设定后再锁定核心规则。</li>
+                  </ul>
+                </article>
+              </div>
+            </div>
           </article>
 
-          <article v-if="activeStep === 'materials'" class="tm-workspace-card">
+          <article v-if="activeStep === 'materials'" class="tm-workspace-card" data-testid="workspace-materials">
             <header class="tm-section-header">
               <div>
                 <p>Materials</p>
                 <h2>资料库</h2>
               </div>
-              <strong>{{ materials.length }} 条资料</strong>
+              <span class="tm-completeness-pill">
+                <span class="tm-pill-dot" :class="materials.length > 0 ? 'done' : 'idle'" />
+                {{ materials.length }} 条资料
+              </span>
             </header>
 
-            <section class="tm-material-toolbar">
-              <button type="button" @click="runMaterialMock('add')">
-                新增资料
-              </button>
-              <button type="button" @click="runMaterialMock('import')">
-                导入文本
-              </button>
-              <button type="button" @click="runMaterialMock('conflict')">
-                资料冲突检查 Mock
-              </button>
-              <span>{{ materialFeedback }}</span>
-            </section>
-
-            <section class="tm-material-layout">
-              <div class="tm-material-list" aria-label="Material cards">
-                <header>
-                  <p>资料卡片列表</p>
-                </header>
-                <button
-                  v-for="material in materials"
-                  :key="material.id"
-                  type="button"
-                  :class="{ selected: selectedMaterial?.id === material.id }"
-                  @click="selectedMaterialId = material.id"
-                >
-                  <span>{{ material.type }}</span>
-                  <strong>{{ material.title }}</strong>
-                  <p>{{ material.content }}</p>
-                  <footer>
-                    <small>引用 {{ material.usageCount }} 次</small>
-                    <small>{{ formatUpdatedAt(material.updatedAt) }}</small>
-                  </footer>
-                </button>
+            <section class="tm-material-shell">
+              <div class="tm-material-topbar">
+                <button type="button" class="tm-primary-action" @click="runMaterialMock('add')">新增资料</button>
+                <button type="button" @click="runMaterialMock('import')">导入文本</button>
+                <button type="button" @click="materialFeedback = '从文件库选择 Mock：已打开可选资源列表。'">从文件库选择</button>
               </div>
 
-              <aside class="tm-material-preview">
-                <p>Current Preview</p>
-                <h3>{{ selectedMaterial?.title || '未选择资料' }}</h3>
-                <article>
-                  {{ selectedMaterial?.content || '选择左侧资料卡片查看内容。' }}
-                </article>
-                <div class="tm-chip-list">
-                  <span
-                    v-for="tag in selectedMaterial?.tags ?? []"
-                    :key="tag"
+              <section class="tm-material-layout">
+                <div class="tm-material-list" aria-label="Material cards">
+                  <header>
+                    <p>资料卡片</p>
+                    <span>{{ materials.length > 0 ? `共 ${materials.length} 条` : '暂无资料' }}</span>
+                  </header>
+                  <button
+                    v-for="(slot, index) in ['世界观资料', '角色资料', '参考文案', '产品资料']"
+                    :key="slot"
+                    type="button"
+                    :class="{ selected: selectedMaterial?.id === materials[index]?.id }"
+                    @click="selectedMaterialId = materials[index]?.id || selectedMaterialId"
                   >
-                    {{ tag }}
-                  </span>
-                  <span v-if="!selectedMaterial?.tags.length">无标签</span>
+                    <div class="tm-material-card-header">
+                      <span class="tm-material-type-badge">{{ slot }}</span>
+                      <strong>{{ materials[index]?.title || slot }}</strong>
+                    </div>
+                    <p>{{ materials[index]?.content?.slice(0, 80) || '长文本资料说明会在这里展示，支持引用和锁定状态。' }}{{ materials[index]?.content?.length > 80 ? '…' : '' }}</p>
+                    <footer>
+                      <small>引用 {{ materials[index]?.usageCount ?? 0 }} 次</small>
+                      <small>{{ materials[index] ? formatUpdatedAt(materials[index].updatedAt) : '待补充' }}</small>
+                    </footer>
+                  </button>
                 </div>
-                <dl>
-                  <div>
-                    <dt>引用次数</dt>
-                    <dd>{{ selectedMaterial?.usageCount ?? 0 }}</dd>
+
+                <aside class="tm-material-preview">
+                  <header>
+                    <p>Current Preview</p>
+                    <h3>{{ selectedMaterial?.title || '未选择资料' }}</h3>
+                  </header>
+                  <article>
+                    {{ selectedMaterial?.content || '选择左侧资料卡片查看长文本内容与引用状态。' }}
+                  </article>
+                  <div class="tm-chip-list">
+                    <span v-for="tag in selectedMaterial?.tags ?? []" :key="tag">{{ tag }}</span>
+                    <span v-if="!selectedMaterial?.tags.length" class="tm-chip-muted">无标签</span>
                   </div>
-                  <div>
-                    <dt>全库标签</dt>
-                    <dd>{{ materialTags.join(' / ') || '暂无标签' }}</dd>
+                  <div class="tm-material-meta">
+                    <div class="tm-meta-item">
+                      <span class="tm-meta-label">引用次数</span>
+                      <span class="tm-meta-value">{{ selectedMaterial?.usageCount ?? 0 }}</span>
+                    </div>
+                    <div class="tm-meta-item">
+                      <span class="tm-meta-label">锁定状态</span>
+                      <span class="tm-meta-value" :class="{ locked: selectedMaterial?.tags.includes('锁定') }">
+                        {{ selectedMaterial?.tags.includes('锁定') ? '🔒 已锁定' : '未锁定' }}
+                      </span>
+                    </div>
                   </div>
-                </dl>
-              </aside>
+                  <div class="tm-material-ai">
+                    <button type="button" class="tm-primary-action" @click="materialFeedback = '资料总结 Mock：已生成摘要。'">总结资料</button>
+                    <button type="button" @click="materialFeedback = '设定提取 Mock：已抽取可复用设定。'">提取设定</button>
+                    <button type="button" @click="runMaterialMock('conflict')">检查资料冲突</button>
+                  </div>
+                  <p class="tm-feedback">{{ materialFeedback }}</p>
+                </aside>
+              </section>
             </section>
           </article>
 
-          <article v-if="activeStep === 'outline'" class="tm-workspace-card">
+          <article v-if="activeStep === 'outline'" class="tm-workspace-card" data-testid="workspace-outline">
             <header class="tm-section-header">
               <div>
                 <p>Outline Factory</p>
                 <h2>大纲工厂</h2>
               </div>
-              <button
-                type="button"
-                class="tm-primary-action"
-                :disabled="isGeneratingOutline"
-                @click="generateOutlineCandidate"
-              >
-                {{ isGeneratingOutline ? '生成中...' : '生成大纲' }}
-              </button>
+              <span class="tm-completeness-pill">
+                <span class="tm-pill-dot" :class="outlineDocuments.length > 0 ? 'done' : 'idle'" />
+                {{ outlineDocuments.length > 0 ? `${outlineDocuments.length} 个大纲` : '待生成' }}
+              </span>
             </header>
 
-            <section class="tm-segmented-control" aria-label="Outline level">
+            <section class="tm-outline-switcher" aria-label="Outline level">
               <button
                 v-for="level in outlineLevels"
                 :key="level.value"
@@ -1599,24 +1788,38 @@ function formatUpdatedAt(value: string): string {
               </button>
             </section>
 
-            <section class="tm-outline-layout">
-              <article class="tm-inner-card">
+            <section class="tm-outline-shell">
+              <article class="tm-outline-main-panel">
                 <header>
                   <p>Total Plot</p>
                   <h3>总剧情大纲</h3>
                 </header>
-                <p class="tm-preline">{{ totalPlotOutline }}</p>
+                <div class="tm-outline-content">
+                  <p class="tm-preline">{{ totalPlotOutline }}</p>
+                </div>
+                <div class="tm-outline-ai">
+                  <button type="button" class="tm-primary-action" @click="generateOutlineCandidate">生成分集大纲</button>
+                  <button type="button" @click="outlineFeedback = '钩子强化 Mock：已突出每一集的结束钩子。'">强化钩子</button>
+                  <button type="button" @click="outlineFeedback = '节奏检查 Mock：节奏曲线已完成初步检查。'">检查节奏</button>
+                </div>
+                <p class="tm-feedback">{{ outlineFeedback }}</p>
               </article>
 
-              <article class="tm-inner-card">
+              <article class="tm-outline-episode-panel">
                 <header>
                   <p>Episode Structure</p>
                   <h3>分集结构</h3>
                 </header>
-                <div class="tm-episode-grid">
-                  <section v-for="episode in episodeStructure" :key="episode.label">
-                    <span>{{ episode.label }}</span>
-                    <strong>{{ episode.title }}</strong>
+                <div class="tm-outline-episode-grid">
+                  <section
+                    v-for="episode in episodeStructure"
+                    :key="episode.label"
+                    class="tm-episode-card"
+                  >
+                    <div class="tm-episode-card-header">
+                      <span class="tm-episode-badge">{{ episode.label }}</span>
+                      <strong>{{ episode.title }}</strong>
+                    </div>
                     <p>{{ episode.summary }}</p>
                   </section>
                 </div>
@@ -1636,47 +1839,49 @@ function formatUpdatedAt(value: string): string {
                 <h3>大纲候选区</h3>
               </header>
               <p class="tm-feedback">{{ outlineFeedback }}</p>
-              <pre>{{ outlineCandidate || '点击“生成大纲”后，Mock AI 结果会进入这里，不会覆盖总剧情大纲。' }}</pre>
+              <pre>{{ outlineCandidate || '点击"生成分集大纲"后，Mock AI 结果会进入这里，不会覆盖总剧情大纲。' }}</pre>
             </section>
           </article>
 
-          <article v-if="activeStep === 'editor'" class="tm-workspace-card tm-editor-card">
+          <article v-if="activeStep === 'editor'" class="tm-workspace-card tm-editor-card" data-testid="workspace-editor">
             <header class="tm-section-header">
               <div>
                 <p>Editor</p>
                 <h2>正文生产</h2>
               </div>
-              <button type="button" class="tm-primary-action" @click="generateEditorCandidate">
-                生成正文候选
-              </button>
+              <span class="tm-completeness-pill">
+                <span class="tm-pill-dot" :class="editorWordCount > 0 ? 'done' : 'idle'" />
+                {{ editorWordCount > 0 ? `${editorWordCount.toLocaleString()} 字` : '空白文档' }}
+              </span>
             </header>
 
             <section class="tm-editor-toolbar">
-              <label>
-                文档选择
-                <select v-model="selectedEditorDocumentId">
-                  <option
+              <div class="tm-editor-doc-selector">
+                <span class="tm-toolbar-label">文档选择</span>
+                <div class="tm-doc-tabs">
+                  <button
                     v-for="option in productionDocumentOptions"
                     :key="option.value"
-                    :value="option.value"
+                    type="button"
+                    :class="{ active: selectedEditorDocumentId === option.value }"
+                    @click="selectedEditorDocumentId = option.value"
                   >
-                    {{ option.label }} - {{ option.title }}
-                  </option>
-                </select>
-              </label>
-              <div>
-                <span>字数统计</span>
-                <strong>{{ editorWordCount }}</strong>
+                    {{ option.label }}
+                    <span v-if="option.label !== '新建'" class="tm-doc-title-hint">{{ option.title }}</span>
+                  </button>
+                </div>
               </div>
-              <div>
-                <span>自动保存状态</span>
-                <strong>{{ autoSaveFeedback }}</strong>
+              <div class="tm-editor-status">
+                <span class="tm-status-item">
+                  <span class="tm-status-label">自动保存</span>
+                  <span class="tm-status-value" :class="{ on: autoSaveEnabled }">{{ autoSaveEnabled ? 'ON' : 'OFF' }}</span>
+                </span>
               </div>
             </section>
 
-            <section class="tm-editor-layout">
+            <section class="tm-editor-shell">
               <label class="tm-markdown-editor">
-                Markdown 文本编辑区
+                <span class="tm-editor-label">Markdown 文本编辑区</span>
                 <textarea
                   ref="editorTextarea"
                   v-model="editorContent"
@@ -1690,17 +1895,20 @@ function formatUpdatedAt(value: string): string {
                   <h3>AI 候选结果区</h3>
                 </header>
                 <p class="tm-feedback">{{ editorFeedback }}</p>
-                <pre>{{ editorCandidate || '生成正文候选后显示在这里。' }}</pre>
+                <div class="tm-candidate-content">
+                  <pre>{{ editorCandidate || '生成正文候选后显示在这里。AI 结果不会直接覆盖正文。' }}</pre>
+                </div>
                 <div class="tm-candidate-actions">
-                  <button type="button" @click="insertCandidateAtCursor">
-                    插入到光标
+                  <button type="button" class="tm-primary-action" @click="insertCandidateAtCursor">插入到光标</button>
+                  <button type="button" @click="replaceSelectionWithCandidate">替换选中</button>
+                  <button type="button" @click="saveEditorCandidateAsVersion">保存为新版本</button>
+                </div>
+                <div class="tm-editor-ai">
+                  <button type="button" @click="generateEditorCandidate">
+                    <span class="tm-btn-icon">✨</span> 生成正文
                   </button>
-                  <button type="button" @click="replaceSelectionWithCandidate">
-                    替换选中
-                  </button>
-                  <button type="button" @click="saveEditorCandidateAsVersion">
-                    保存为新版本
-                  </button>
+                  <button type="button" @click="editorFeedback = '继续写 Mock：已基于当前段落向下续写。'">继续写</button>
+                  <button type="button" @click="editorFeedback = '审核当前文档 Mock：已完成初步审查。'">审核当前文档</button>
                 </div>
               </aside>
             </section>
@@ -2101,6 +2309,7 @@ function formatUpdatedAt(value: string): string {
       </section>
 
       <AiActionPanel
+        data-testid="text-master-ai-panel"
         :project-status="projectStatus"
         :progress="projectProgress"
         :runtime-mode="runtimeMode"
@@ -2112,35 +2321,39 @@ function formatUpdatedAt(value: string): string {
 </template>
 
 <style scoped>
-.tm-workspace-page {
+.tm-workspace-page.tm-workspace-page {
+  --tm-page-padding: 16px 24px;
+
   display: grid;
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr);
-  background: #050506;
-  color: #f4f4f5;
+  gap: 10px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--tm-bg);
+  color: var(--tm-text);
+  padding: 16px 24px;
 }
 
 .tm-workspace-body {
   display: grid;
   min-height: 0;
   min-width: 0;
-  grid-template-columns: 220px minmax(0, 1fr) 300px;
+  grid-template-columns: var(--tm-sidebar-width) minmax(0, 1fr) var(--tm-ai-panel-width);
+  gap: 10px;
 }
 
 .tm-workspace-main {
   min-width: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 18px;
 }
 
 .tm-workspace-notice {
-  border: 1px solid rgba(161, 161, 170, 0.16);
+  border: 1px solid var(--tm-border);
   border-radius: 999px;
-  background: #111113;
-  color: #a1a1aa;
+  background: var(--tm-card-muted);
+  color: var(--tm-text-muted);
   margin-bottom: 12px;
   padding: 8px 12px;
   font-size: 12px;
@@ -2151,21 +2364,21 @@ function formatUpdatedAt(value: string): string {
 .tm-candidate-panel,
 .tm-diff-panel {
   min-width: 0;
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: rgba(24, 24, 27, 0.92);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-panel);
+  box-shadow: var(--tm-shadow-card);
 }
 
 .tm-workspace-card {
-  padding: 22px;
+  padding: 14px 16px 16px;
 }
 
 .tm-inner-card,
 .tm-candidate-panel,
 .tm-diff-panel {
-  background: #111113;
-  padding: 16px;
+  background: var(--tm-card-muted);
+  padding: 12px;
 }
 
 .tm-section-header {
@@ -2176,11 +2389,12 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-section-header > strong {
-  border: 1px solid rgba(161, 161, 170, 0.18);
+  border: 1px solid var(--tm-border);
   border-radius: 999px;
-  background: #18181b;
-  padding: 6px 10px;
-  font-size: 12px;
+  background: var(--tm-card);
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--tm-text-muted);
 }
 
 .tm-section-header p,
@@ -2199,7 +2413,7 @@ function formatUpdatedAt(value: string): string {
 .tm-short-drama-rules span,
 .tm-episode-grid span,
 .tm-rewrite-options span {
-  color: #a1a1aa;
+  color: var(--tm-text-muted);
   font-size: 12px;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2215,7 +2429,275 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-section-header h2 {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.tm-workspace-card[data-testid="workspace-overview"] > .tm-section-header,
+.tm-workspace-card[data-testid="workspace-overview"] .tm-hero-summary,
+.tm-workspace-card[data-testid="workspace-overview"] .tm-overview-grid,
+.tm-workspace-card[data-testid="workspace-overview"] .tm-workflow-grid,
+.tm-workspace-card[data-testid="workspace-overview"] .tm-two-column {
+  display: none;
+}
+
+.tm-overview-shell {
+  display: grid;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.tm-overview-title,
+.tm-overview-metrics article,
+.tm-overview-summary,
+.tm-overview-production,
+.tm-flow-card,
+.tm-overview-next .tm-inner-card {
+  min-width: 0;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-card-muted);
+  box-shadow: var(--tm-shadow-card);
+  padding: 16px;
+}
+
+.tm-overview-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 2px 2px;
+}
+
+.tm-overview-title p,
+.tm-overview-metrics span,
+.tm-overview-summary > p:first-child,
+.tm-overview-summary dt,
+.tm-overview-production header p,
+.tm-overview-production header span,
+.tm-overview-next header p {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tm-overview-title h2 {
+  margin: 5px 0 0;
   font-size: 24px;
+}
+
+.tm-overview-title span {
+  display: block;
+  margin-top: 6px;
+  color: var(--tm-text-muted);
+  font-size: 13px;
+}
+
+.tm-overview-title > strong {
+  flex: 0 0 auto;
+  border: 1px solid rgba(139, 140, 255, 0.36);
+  border-radius: var(--tm-radius-pill);
+  background: rgba(119, 117, 255, 0.14);
+  color: #dce3ff;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
+.tm-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tm-overview-metrics article {
+  display: grid;
+  gap: 8px;
+  min-height: 88px;
+  align-content: center;
+}
+
+.tm-overview-metrics strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.tm-overview-metrics small {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+}
+
+.tm-overview-metrics meter {
+  width: 100%;
+}
+
+.tm-overview-summary {
+  min-height: 118px;
+}
+
+.tm-overview-summary h3 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+
+.tm-overview-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tm-overview-summary-meta span {
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-pill);
+  background: var(--tm-card);
+  color: var(--tm-text-soft);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.tm-overview-production header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.tm-overview-production header h3 {
+  margin: 5px 0 0;
+  font-size: 20px;
+}
+
+.tm-overview-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tm-flow-card {
+  display: grid;
+  gap: 10px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+.tm-flow-card div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tm-flow-card strong {
+  font-size: 18px;
+}
+
+.tm-flow-card em {
+  flex: 0 0 auto;
+  border-radius: var(--tm-radius-pill);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.tm-flow-card p {
+  color: var(--tm-text-soft);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.tone-success {
+  border-color: rgba(72, 213, 138, 0.62);
+}
+
+.tone-success strong {
+  color: #73e39a;
+}
+
+.tone-success em {
+  background: rgba(72, 213, 138, 0.16);
+  color: #baf4d1;
+}
+
+.tone-running {
+  border-color: rgba(87, 112, 255, 0.68);
+}
+
+.tone-running strong {
+  color: #8fb2ff;
+}
+
+.tone-running em {
+  background: rgba(87, 112, 255, 0.18);
+  color: #cfd8ff;
+}
+
+.tone-warning {
+  border-color: rgba(244, 163, 64, 0.68);
+}
+
+.tone-warning strong {
+  color: #f6bf6f;
+}
+
+.tone-warning em {
+  background: rgba(244, 163, 64, 0.16);
+  color: #ffd7a3;
+}
+
+.tone-idle {
+  border-color: rgba(132, 151, 190, 0.28);
+}
+
+.tone-idle strong {
+  color: var(--tm-text-soft);
+}
+
+.tone-idle em {
+  background: rgba(132, 151, 190, 0.12);
+  color: var(--tm-text-muted);
+}
+
+.tm-overview-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+}
+
+.tm-overview-next .tm-inner-card {
+  padding: 14px;
+}
+
+.tm-overview-next ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-overview-next li {
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  color: var(--tm-text-soft);
+  padding: 10px 12px;
+  line-height: 1.6;
+}
+
+.tm-overview-next button {
+  min-height: 40px;
+  margin-top: 16px;
+  border: 1px solid rgba(139, 140, 255, 0.54);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-accent-gradient);
+  color: white;
+  padding: 0 14px;
 }
 
 .tm-hero-summary,
@@ -2226,8 +2708,8 @@ function formatUpdatedAt(value: string): string {
 .tm-rewrite-grid,
 .tm-diff-grid {
   display: grid;
-  gap: 16px;
-  margin-top: 18px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .tm-hero-summary,
@@ -2246,9 +2728,9 @@ function formatUpdatedAt(value: string): string {
 .tm-short-drama-rules article,
 .tm-diff-grid article {
   min-width: 0;
-  border-radius: 8px;
-  background: #111113;
-  padding: 16px;
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 14px;
 }
 
 .tm-hero-summary h3 {
@@ -2265,8 +2747,9 @@ function formatUpdatedAt(value: string): string {
 .tm-feedback,
 .tm-episode-grid p,
 .tm-diff-grid p {
-  color: #c4c4c8;
-  line-height: 1.75;
+  color: var(--tm-text-soft);
+  line-height: 1.65;
+  font-size: 14px;
 }
 
 .tm-progress-dial {
@@ -2285,8 +2768,8 @@ function formatUpdatedAt(value: string): string {
 .tm-short-drama-rules,
 .tm-episode-grid {
   display: grid;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .tm-overview-grid {
@@ -2336,7 +2819,6 @@ function formatUpdatedAt(value: string): string {
 .tm-completeness-card button,
 .tm-material-toolbar button,
 .tm-export-link,
-.tm-primary-action,
 .tm-candidate-actions button,
 .tm-rewrite-options button,
 .tm-rewrite-grid button,
@@ -2347,19 +2829,27 @@ function formatUpdatedAt(value: string): string {
 .tm-version-actions button,
 .tm-export-format-grid button,
 .tm-export-targets button {
-  min-height: 40px;
-  border: 1px solid rgba(212, 212, 216, 0.18);
-  border-radius: 6px;
-  background: #27272a;
-  color: #f4f4f5;
+  min-height: 36px;
+  border: 1px solid var(--tm-border);
+  border-radius: 8px;
+  background: var(--tm-card-strong);
+  color: var(--tm-text-soft);
   padding: 0 14px;
+  font-size: 13px;
 }
 
 .tm-primary-action {
-  border-color: rgba(129, 140, 248, 0.62);
-  background: #2f3347;
-  color: #eef2ff;
+  border-color: rgba(48, 103, 255, 0.5);
+  background: var(--tm-accent-gradient);
+  color: white;
   font-weight: 700;
+  box-shadow: 0 0 18px rgba(48, 103, 255, 0.18), 0 0 4px rgba(132, 80, 255, 0.12);
+  transition: box-shadow 200ms ease, transform 160ms ease;
+}
+
+.tm-primary-action:hover {
+  box-shadow: 0 0 24px rgba(48, 103, 255, 0.28), 0 0 8px rgba(132, 80, 255, 0.18);
+  transform: translateY(-1px);
 }
 
 .tm-primary-action:disabled {
@@ -2402,11 +2892,11 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-chip-list span {
-  border: 1px solid rgba(161, 161, 170, 0.18);
+  border: 1px solid var(--tm-border);
   border-radius: 999px;
-  background: #18181b;
-  color: #d4d4d8;
-  padding: 6px 10px;
+  background: var(--tm-card);
+  color: var(--tm-text-soft);
+  padding: 5px 10px;
   font-size: 12px;
 }
 
@@ -2420,14 +2910,124 @@ function formatUpdatedAt(value: string): string {
   margin-top: 14px;
 }
 
+.tm-settings-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.tm-settings-main,
+.tm-settings-aside {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tm-settings-main {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tm-settings-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-card-muted);
+  padding: 16px;
+}
+
+.tm-settings-card-wide {
+  grid-column: 1 / -1;
+}
+
+.tm-settings-text-block {
+  display: grid;
+  gap: 4px;
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 10px;
+}
+
+.tm-settings-text-block strong {
+  font-size: 12px;
+}
+
+.tm-settings-text-block p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.tm-settings-text-block strong,
+.tm-settings-copy {
+  color: var(--tm-text-soft);
+}
+
+.tm-settings-copy {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.tm-settings-rail,
+.tm-settings-locks {
+  height: fit-content;
+}
+
+.tm-settings-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.tm-settings-actions button {
+  min-height: 36px;
+  font-size: 12px;
+}
+
+.tm-settings-bullets {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-settings-bullets li {
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  color: var(--tm-text-soft);
+  padding: 8px 10px;
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+.tm-material-shell {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tm-material-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm-material-actions span {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+}
+
 .tm-material-toolbar,
 .tm-editor-toolbar,
 .tm-rewrite-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .tm-material-toolbar span,
@@ -2438,6 +3038,7 @@ function formatUpdatedAt(value: string): string {
 
 .tm-material-layout {
   grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 12px;
 }
 
 .tm-material-list {
@@ -2447,20 +3048,20 @@ function formatUpdatedAt(value: string): string {
 
 .tm-material-list button {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: #111113;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
   color: inherit;
-  padding: 16px;
+  padding: 12px;
   text-align: left;
 }
 
 .tm-material-list button.selected {
-  border-color: rgba(129, 140, 248, 0.5);
-  background: #27272a;
+  border-color: rgba(48, 103, 255, 0.45);
+  background: var(--tm-card-strong);
 }
 
 .tm-material-list footer {
@@ -2472,14 +3073,125 @@ function formatUpdatedAt(value: string): string {
 
 .tm-material-preview {
   min-width: 0;
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: #111113;
-  padding: 16px;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.tm-material-preview article,
+.tm-material-preview dl {
+  line-height: 1.7;
 }
 
 .tm-material-preview article {
-  margin-top: 14px;
+  color: var(--tm-text-soft);
+}
+
+.tm-material-ai {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tm-material-ai button {
+  min-height: 40px;
+}
+
+.tm-outline-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tm-outline-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tm-outline-main-panel,
+.tm-outline-episode-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-card-muted);
+  padding: 12px;
+}
+
+.tm-outline-episode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tm-outline-episode-grid section {
+  display: grid;
+  gap: 8px;
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 12px;
+}
+
+.tm-outline-episode-grid p {
+  color: var(--tm-text-soft);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.tm-outline-ai {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tm-outline-ai button {
+  min-height: 40px;
+}
+
+.tm-editor-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tm-editor-card {
+  min-width: 0;
+}
+
+.tm-editor-card .tm-markdown-editor {
+  min-width: 0;
+}
+
+.tm-editor-card .tm-markdown-editor textarea {
+  min-height: 320px;
+  max-height: 52vh;
+  resize: vertical;
+}
+
+.tm-editor-ai {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tm-editor-ai button {
+  min-height: 40px;
+}
+
+.tm-material-preview article {
+  margin-top: 10px;
+  line-height: 1.65;
+  color: var(--tm-text-soft);
+  font-size: 14px;
+  max-height: 180px;
+  overflow: auto;
 }
 
 .tm-segmented-control {
@@ -2489,20 +3201,41 @@ function formatUpdatedAt(value: string): string {
   margin-top: 18px;
 }
 
-.tm-segmented-control button,
-.tm-rewrite-options button.active {
-  border: 1px solid rgba(161, 161, 170, 0.18);
+.tm-outline-switcher button,
+.tm-segmented-control button {
+  border: 1px solid var(--tm-border);
   border-radius: 999px;
-  background: #18181b;
-  color: #d4d4d8;
-  padding: 8px 12px;
+  background: var(--tm-card);
+  color: var(--tm-text-muted);
+  padding: 7px 12px;
+  font-size: 13px;
 }
 
-.tm-segmented-control button.active,
-.tm-rewrite-options button.active {
-  border-color: rgba(129, 140, 248, 0.54);
-  background: #1f2130;
-  color: #eef2ff;
+.tm-outline-switcher button.active,
+.tm-segmented-control button.active {
+  border-color: rgba(48, 103, 255, 0.5);
+  background: rgba(48, 103, 255, 0.1);
+  color: var(--tm-text);
+}
+
+.tm-settings-card header,
+.tm-material-preview p,
+.tm-outline-main-panel header,
+.tm-outline-episode-panel header,
+.tm-editor-card header,
+.tm-candidate-panel header {
+  margin-bottom: 0;
+}
+
+.tm-settings-card header h3,
+.tm-material-preview h3,
+.tm-outline-main-panel h3,
+.tm-outline-episode-panel h3,
+.tm-editor-card h2,
+.tm-candidate-panel h3 {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .tm-preline,
@@ -2519,7 +3252,7 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-candidate-panel {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .tm-candidate-panel pre {
@@ -2858,6 +3591,11 @@ function formatUpdatedAt(value: string): string {
 
   .tm-overview-grid,
   .tm-settings-grid,
+  .tm-settings-shell,
+  .tm-settings-main,
+  .tm-material-shell,
+  .tm-outline-shell,
+  .tm-editor-shell,
   .tm-hero-summary,
   .tm-two-column,
   .tm-material-layout,
@@ -2875,20 +3613,403 @@ function formatUpdatedAt(value: string): string {
     grid-column: auto;
     grid-row: auto;
   }
+
+  .tm-settings-main,
+  .tm-material-layout,
+  .tm-outline-shell,
+  .tm-editor-shell {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
   .tm-overview-grid,
+  .tm-settings-main,
+  .tm-outline-episode-grid,
   .tm-workflow-grid,
   .tm-short-drama-rules,
   .tm-episode-grid,
+  .tm-material-list,
   .tm-candidate-actions,
+  .tm-material-actions,
+  .tm-material-ai,
+  .tm-settings-actions,
+  .tm-outline-ai,
+  .tm-editor-ai,
   .tm-diff-grid,
   .tm-issue-actions,
   .tm-version-actions,
   .tm-export-format-grid,
   .tm-export-targets {
     grid-template-columns: 1fr;
+  }
+}
+
+/* === New v2 component styles === */
+
+/* Completeness pill (replaces header strong) */
+.tm-completeness-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--tm-border);
+  border-radius: 999px;
+  background: var(--tm-card);
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--tm-text-soft);
+  white-space: nowrap;
+}
+
+.tm-pill-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #72798b;
+}
+
+.tm-pill-dot.done { background: var(--tm-success); }
+.tm-pill-dot.warn { background: var(--tm-warning); }
+.tm-pill-dot.idle { background: #72798b; }
+
+/* Settings v2 layout */
+.tm-settings-grid-v2 {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tm-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.tm-settings-card-v2 {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-card-muted);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.tm-settings-card-v2 header p {
+  color: var(--tm-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.tm-settings-card-v2 header h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tm-settings-card-wide {
+  grid-column: 1 / -1;
+}
+
+.tm-settings-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.tm-settings-long-text p {
+  color: var(--tm-text-soft);
+  line-height: 1.65;
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Lock chips */
+.tm-lock-chip {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+}
+
+.tm-lock-icon {
+  font-size: 11px;
+}
+
+.tm-chip-muted {
+  color: var(--tm-text-muted) !important;
+  border-style: dashed !important;
+}
+
+/* Button icons */
+.tm-btn-icon {
+  font-size: 12px;
+}
+
+/* Bullet markers */
+.tm-bullet-marker {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tm-accent);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.tm-bullet-hint {
+  color: var(--tm-text-muted) !important;
+}
+
+/* Settings AI row */
+.tm-settings-ai-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 10px;
+}
+
+.tm-settings-locks-card {
+  min-height: auto;
+}
+
+/* Materials topbar */
+.tm-material-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm-material-list header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.tm-material-list header span {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+}
+
+.tm-material-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.tm-material-type-badge {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid rgba(48, 103, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(48, 103, 255, 0.12);
+  color: #93B4FF;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Material meta */
+.tm-material-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.tm-meta-item {
+  display: grid;
+  gap: 4px;
+}
+
+.tm-meta-label {
+  color: #a1a1aa;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.tm-meta-value {
+  color: var(--tm-text-soft);
+  font-size: 13px;
+}
+
+.tm-meta-value.locked {
+  color: var(--tm-success);
+}
+
+/* Outline v2 */
+.tm-outline-content {
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 10px;
+  min-height: 60px;
+}
+
+.tm-outline-content p {
+  margin: 0;
+  line-height: 1.65;
+  color: var(--tm-text-soft);
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+
+.tm-episode-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(161, 161, 170, 0.14);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 10px;
+  transition: border-color 160ms ease;
+}
+
+.tm-episode-card:hover {
+  border-color: rgba(129, 140, 248, 0.28);
+}
+
+.tm-episode-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.tm-episode-badge {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid rgba(48, 103, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(48, 103, 255, 0.15);
+  color: #A5C1FF;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tm-episode-card p {
+  color: var(--tm-text-soft);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Editor v2 */
+.tm-editor-doc-selector {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-toolbar-label {
+  color: #a1a1aa;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.tm-doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tm-doc-tabs button {
+  display: grid;
+  gap: 2px;
+  min-height: 32px;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  color: var(--tm-text-muted);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tm-doc-tabs button.active {
+  border-color: rgba(48, 103, 255, 0.5);
+  background: rgba(48, 103, 255, 0.1);
+  color: var(--tm-text);
+}
+
+.tm-doc-title-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: #a1a1aa;
+}
+
+.tm-editor-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tm-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tm-status-label {
+  color: #a1a1aa;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.tm-status-value {
+  border: 1px solid rgba(161, 161, 170, 0.18);
+  border-radius: 999px;
+  background: #18181b;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #d4d4d8;
+}
+
+.tm-status-value.on {
+  border-color: rgba(36, 204, 124, 0.35);
+  background: rgba(36, 204, 124, 0.12);
+  color: var(--tm-success);
+}
+
+.tm-editor-label {
+  display: block;
+  color: #a1a1aa;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.tm-candidate-content {
+  max-height: 200px;
+  overflow: auto;
+  border-radius: var(--tm-radius-control);
+  background: #09090b;
+  padding: 10px;
+  margin-top: 8px;
+}
+
+.tm-candidate-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d4d4d8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Responsive fixes for settings v2 */
+@media (max-width: 980px) {
+  .tm-settings-row,
+  .tm-settings-ai-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tm-editor-doc-selector,
+  .tm-editor-status {
+    width: 100%;
+  }
+
+  .tm-doc-tabs {
+    width: 100%;
+    overflow-x: auto;
   }
 }
 </style>

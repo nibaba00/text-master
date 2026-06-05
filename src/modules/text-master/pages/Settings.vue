@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { textMasterNavigation } from '../routes';
+import TopNav from '../components/TopNav.vue';
 import { createTextMasterRuntime, type RuntimeMode } from '../runtime/TextMasterRuntime';
 import { detectRuntimeMode } from '../runtime/runtimeDetection';
 
@@ -139,16 +139,8 @@ function resetSettingsMock(): void {
 </script>
 
 <template>
-  <main class="tm-settings-page">
-    <nav class="tm-settings-nav" aria-label="Text Master navigation">
-      <RouterLink
-        v-for="item in textMasterNavigation"
-        :key="item.path"
-        :to="item.path"
-      >
-        {{ item.label }}
-      </RouterLink>
-    </nav>
+  <main class="tm-settings-page" data-testid="text-master-settings">
+    <TopNav />
 
     <header class="tm-settings-header">
       <div>
@@ -290,29 +282,29 @@ function resetSettingsMock(): void {
 
 <style scoped>
 .tm-settings-page {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
-  overflow-x: hidden;
-  background: #050506;
-  color: #f4f4f5;
-  padding: 28px;
+  overflow: hidden;
+  background: var(--tm-bg);
+  color: var(--tm-text);
+  padding: var(--tm-page-padding);
 }
 
 .tm-settings-nav,
 .tm-settings-header,
 .tm-settings-feedback,
 .tm-settings-card {
-  border: 1px solid rgba(161, 161, 170, 0.16);
-  border-radius: 8px;
-  background: rgba(24, 24, 27, 0.9);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-card);
+  background: var(--tm-panel);
+  box-shadow: var(--tm-shadow-card);
 }
 
 .tm-settings-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-width: 1180px;
+  max-width: var(--tm-page-max-width);
   margin: 0 auto 18px;
   padding: 10px;
 }
@@ -333,9 +325,9 @@ function resetSettingsMock(): void {
 }
 
 .tm-settings-actions button.tm-button-primary {
-  border-color: rgba(129, 140, 248, 0.62);
-  background: #2f3347;
-  color: #eef2ff;
+  border-color: rgba(139, 140, 255, 0.62);
+  background: var(--tm-accent-gradient);
+  color: white;
   font-weight: 700;
 }
 
@@ -344,9 +336,9 @@ function resetSettingsMock(): void {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 14px;
 }
 
 .tm-settings-header p,
@@ -361,8 +353,8 @@ function resetSettingsMock(): void {
 }
 
 .tm-settings-header h1 {
-  margin: 6px 0;
-  font-size: 36px;
+  margin: 4px 0;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -370,7 +362,7 @@ function resetSettingsMock(): void {
   display: block;
   text-transform: none;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.45;
 }
 
 .tm-settings-actions {
@@ -382,9 +374,9 @@ function resetSettingsMock(): void {
 
 .tm-settings-feedback,
 .tm-error {
-  max-width: 1180px;
-  margin: 18px auto 0;
-  padding: 12px 14px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  padding: 8px 12px;
   text-transform: none;
 }
 
@@ -395,21 +387,23 @@ function resetSettingsMock(): void {
 .tm-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  max-width: 1180px;
-  margin: 18px auto 0;
+  gap: 10px;
+  max-width: var(--tm-page-max-width);
+  margin: 10px auto 0;
+  max-height: calc(100vh - var(--tm-nav-height) - 230px);
+  overflow: auto;
 }
 
 .tm-settings-card {
   display: grid;
-  gap: 16px;
+  gap: 8px;
   min-width: 0;
-  padding: 20px;
+  padding: 12px;
 }
 
 .tm-settings-card h2 {
-  margin: 6px 0 0;
-  font-size: 20px;
+  margin: 4px 0 0;
+  font-size: 16px;
 }
 
 .tm-settings-card label {
@@ -453,7 +447,7 @@ function resetSettingsMock(): void {
   border: 1px solid rgba(161, 161, 170, 0.16);
   border-radius: 8px;
   background: #111113;
-  padding: 12px;
+  padding: 8px;
 }
 
 .tm-runtime-switch span.active,
@@ -522,6 +516,47 @@ function resetSettingsMock(): void {
   .tm-runtime-card,
   .tm-adapter-card {
     grid-row: auto;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 981px) {
+  .tm-settings-page.tm-settings-page {
+    padding-block: 10px !important;
+  }
+
+  .tm-settings-header {
+    margin-top: 6px;
+    padding: 10px;
+  }
+
+  .tm-settings-header h1 {
+    font-size: 22px;
+  }
+
+  .tm-settings-header span,
+  .tm-strategy-options span,
+  .tm-adapter-card p {
+    line-height: 1.25;
+  }
+
+  .tm-settings-feedback,
+  .tm-error,
+  .tm-settings-grid {
+    margin-top: 6px;
+  }
+
+  .tm-settings-grid {
+    max-height: calc(100vh - var(--tm-nav-height) - 250px);
+  }
+
+  .tm-settings-card {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .tm-settings-card input[type='text'],
+  .tm-settings-card select {
+    padding-block: 8px;
   }
 }
 

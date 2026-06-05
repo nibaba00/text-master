@@ -186,7 +186,7 @@ export async function createBrainHubRuntime(
       input: ExportRequest,
     ): Promise<ExportResult> => {
       const result = await localRuntime.exportProject(input);
-      await saveHubFileStub(input.fileName, input.content, adapterContext);
+      await saveHubFileStub(result.fileName, result.content, adapterContext);
       await reportHubUsage('text-master.export', {
         projectId: input.projectId,
         format: input.format,

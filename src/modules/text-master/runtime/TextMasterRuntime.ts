@@ -7,6 +7,11 @@ import type {
   TextProjectType,
 } from '../types/project';
 import type { TextVersion, TextVersionOperation } from '../types/version';
+import type {
+  GenerationCandidate,
+  GenerationJob,
+  ReviewIssue,
+} from '../types/production';
 import { createSafeBrainHubRuntime } from './BrainHubRuntime';
 import { createLocalRuntime } from './LocalRuntime';
 import { detectRuntimeMode } from './runtimeDetection';
@@ -81,6 +86,8 @@ export type TextGenerationResult = {
   text: string;
   provider: 'mock' | 'brain-hub';
   createdAt: string;
+  job?: GenerationJob;
+  candidate?: GenerationCandidate;
 };
 
 export type TextReviewResult = {
@@ -88,6 +95,9 @@ export type TextReviewResult = {
   issues: string[];
   provider: 'mock' | 'brain-hub';
   createdAt: string;
+  job?: GenerationJob;
+  candidate?: GenerationCandidate;
+  reviewIssues?: ReviewIssue[];
 };
 
 export type VersionCreateInput = {
@@ -126,6 +136,9 @@ export type TextMasterRuntime = {
   listDocuments: (projectId: string) => Promise<TextDocument[]>;
   listMaterials: (projectId: string) => Promise<TextMaterial[]>;
   listVersions: (projectId: string) => Promise<TextVersion[]>;
+  listJobs: (projectId?: string) => Promise<GenerationJob[]>;
+  listCandidates: (projectId?: string) => Promise<GenerationCandidate[]>;
+  listReviewIssues: (projectId?: string) => Promise<ReviewIssue[]>;
   saveDocument: (input: DocumentSaveInput) => Promise<TextDocument>;
   generateText: (input: GenerateTextInput) => Promise<TextGenerationResult>;
   reviewText: (input: ReviewTextInput) => Promise<TextReviewResult>;
