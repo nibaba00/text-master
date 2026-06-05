@@ -2,4 +2,17 @@ node_modules/
 dist/
 artifacts/
 
+# CodeWhale
+.codewhale/
+
+# Design pack
+TextMaster_all_pages_design_pack/
+TextMaster_all_pages_design_pack.zip
+
+# Dev docs (commands / prompts)
+TextMaster_NextStage_Codex_Commands.md
+DeepSeek_V4_TextMaster_Design_Prompts.md
+TextMaster_MVP_Codex_Commands.md
+
+# Logs
 *.log
