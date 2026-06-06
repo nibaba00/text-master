@@ -5,6 +5,8 @@ import type {
   TextProjectStatus,
   TextProjectType,
 } from '../types/project';
+import type { WorkspaceType } from '../workflows/types';
+import { getDefaultStageId, getWorkflowById } from '../workflows/workflowRegistry';
 import {
   cloneValue,
   createTextMasterId,
@@ -33,6 +35,9 @@ export async function getProject(projectId: string): Promise<TextProject | null>
 export type CreateProjectInput = {
   title: string;
   type: TextProjectType;
+  workflowId?: string;
+  workspaceType?: WorkspaceType;
+  currentStageId?: string;
   summary?: string;
   status?: TextProjectStatus;
   settings?: Partial<TextProjectSettings>;
@@ -47,11 +52,15 @@ export async function createProject(input: CreateProjectInput): Promise<TextProj
     }
 
     const now = new Date().toISOString();
+    const workflow = getWorkflowById(input.workflowId);
     const projects = readProjects();
     const project: TextProject = {
       id: createTextMasterId('project'),
       title,
       type: input.type,
+      workflowId: workflow.id,
+      workspaceType: input.workspaceType ?? workflow.workspaceType,
+      currentStageId: input.currentStageId ?? getDefaultStageId(workflow.id),
       status: input.status ?? 'draft',
       summary: input.summary?.trim() ?? '',
       wordCount: 0,
@@ -99,7 +108,15 @@ export async function updateProject(
   patch: Partial<
     Pick<
       TextProject,
-      'title' | 'type' | 'status' | 'summary' | 'progress' | 'settings'
+      | 'title'
+      | 'type'
+      | 'workflowId'
+      | 'workspaceType'
+      | 'currentStageId'
+      | 'status'
+      | 'summary'
+      | 'progress'
+      | 'settings'
     >
   >,
 ): Promise<TextProject> {
@@ -158,6 +175,7 @@ function normalizeProject(project: TextProject): TextProject {
     settings.exportFormats && settings.exportFormats.length > 0
       ? [...settings.exportFormats]
       : defaultSettings.exportFormats;
+  const workflow = getWorkflowById(project.workflowId);
 
   return {
     ...project,
@@ -165,6 +183,13 @@ function normalizeProject(project: TextProject): TextProject {
     summary: project.summary ?? '',
     wordCount: Math.max(0, Math.round(project.wordCount ?? 0)),
     progress: clampProgress(project.progress ?? 0),
+    workflowId: workflow.id,
+    workspaceType: project.workspaceType ?? workflow.workspaceType,
+    currentStageId:
+      project.currentStageId &&
+      workflow.stages.some((stage) => stage.id === project.currentStageId)
+        ? project.currentStageId
+        : workflow.defaultStageId,
     settings: {
       ...defaultSettings,
       ...settings,

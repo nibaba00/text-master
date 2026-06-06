@@ -16,3 +16,6 @@ TextMaster_MVP_Codex_Commands.md
 
 # Logs
 *.log
+
+# Local API runtime state and secrets
+apps/api/data/

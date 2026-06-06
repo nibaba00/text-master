@@ -81,7 +81,7 @@ const preferenceRows = computed(() => [
       <article class="tm-profile-card tm-user-card">
         <header>
           <h2>用户信息</h2>
-          <p>右上角用户资料按钮进入此页或弹窗</p>
+          <p>从右上角入口进入。</p>
         </header>
 
         <section class="tm-user-identity">
@@ -100,8 +100,8 @@ const preferenceRows = computed(() => [
 
       <article class="tm-profile-card tm-preference-card">
         <header>
-          <h2>使用偏好与账户状态</h2>
-          <p>用户信息低频，但需要清楚呈现</p>
+          <h2>偏好与状态</h2>
+          <p>账户信息保持简洁展示</p>
         </header>
 
         <dl class="tm-preference-list">
@@ -122,7 +122,7 @@ const preferenceRows = computed(() => [
           </article>
           <article>
             <span>账号状态</span>
-            <strong>Local Ready</strong>
+            <strong>就绪</strong>
           </article>
         </section>
       </article>
@@ -175,7 +175,7 @@ const preferenceRows = computed(() => [
 .tm-profile-layout {
   display: grid;
   grid-template-columns: minmax(280px, 390px) minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   padding: 10px 10px 0;
 }
 
@@ -203,18 +203,18 @@ const preferenceRows = computed(() => [
 .tm-user-card {
   display: grid;
   grid-template-rows: auto auto 1fr;
-  min-height: 730px;
+  min-height: 660px;
 }
 
 .tm-user-identity {
   display: grid;
   justify-items: center;
-  padding: 20px 28px 26px;
+  padding: 18px 24px 22px;
   text-align: center;
 }
 
 .tm-user-avatar-large {
-  width: 140px;
+  width: 124px;
   aspect-ratio: 1;
   border: 1px solid rgba(139, 140, 255, 0.42);
   border-radius: var(--tm-radius-pill);
@@ -225,23 +225,23 @@ const preferenceRows = computed(() => [
 }
 
 .tm-user-identity h3 {
-  margin: 24px 0 6px;
-  font-size: 30px;
+  margin: 18px 0 6px;
+  font-size: 28px;
   line-height: 1;
 }
 
 .tm-user-identity p {
   margin: 0;
   color: var(--tm-text-soft);
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .tm-user-stats {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 14px;
   margin: 0;
-  padding: 20px 38px 44px;
+  padding: 18px 28px 32px;
 }
 
 .tm-user-stats div,

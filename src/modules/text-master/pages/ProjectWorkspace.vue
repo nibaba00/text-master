@@ -1,10 +1,22 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AiActionPanel from '../components/AiActionPanel.vue';
 import TopNav from '../components/TopNav.vue';
 import WorkspaceHeader from '../components/WorkspaceHeader.vue';
 import WorkspaceSidebar from '../components/WorkspaceSidebar.vue';
+import {
+  buildNextRecommendedAction,
+  buildProductionEntryCards,
+  buildOverviewFlowCards,
+  buildOverviewPendingItems,
+  buildProductionDocumentOptions,
+  buildProductionRules,
+  buildWorkspaceNavItems,
+  buildWorkflowCards,
+  getProductionChainProfile,
+  type WorkspaceStep,
+} from '../workflows/productionChainProfiles';
 import {
   createTextMasterRuntime,
   type RuntimeMode,
@@ -19,23 +31,6 @@ import type {
   TextProjectType,
 } from '../types/project';
 import type { TextVersion } from '../types/version';
-
-type WorkspaceStep =
-  | 'overview'
-  | 'settings'
-  | 'materials'
-  | 'outline'
-  | 'editor'
-  | 'rewrite'
-  | 'review'
-  | 'versions'
-  | 'export';
-
-type WorkspaceNavItem = {
-  key: WorkspaceStep;
-  label: string;
-  description: string;
-};
 
 type AiAction = 'generate' | 'rewrite' | 'review' | 'export';
 type OutlineLevel = 'total' | 'volume' | 'chapter' | 'episode' | 'scene';
@@ -83,6 +78,13 @@ type WorkflowCard = {
   status: string;
   detail: string;
   score: number;
+  tone?: 'success' | 'running' | 'warning' | 'idle';
+};
+
+type ProductionEntryCard = {
+  title: string;
+  description: string;
+  step: WorkspaceStep;
   tone?: 'success' | 'running' | 'warning' | 'idle';
 };
 
@@ -266,18 +268,6 @@ const selectedExportTarget = ref<ExportTargetKey>('local');
 const exportFeedback = ref('导出队列空闲。');
 const isExporting = ref(false);
 
-const workspaceNavItems: WorkspaceNavItem[] = [
-  { key: 'overview', label: '项目总览', description: '状态、目标、进度' },
-  { key: 'settings', label: '创作设定', description: '风格、策略、规则' },
-  { key: 'materials', label: '资料库', description: '素材与引用' },
-  { key: 'outline', label: '大纲工厂', description: '结构和章节' },
-  { key: 'editor', label: '正文生产', description: '草稿和正文' },
-  { key: 'rewrite', label: '改写工厂', description: '重写与扩写' },
-  { key: 'review', label: '审核工厂', description: '一致性和风险' },
-  { key: 'versions', label: '版本记录', description: '快照和历史' },
-  { key: 'export', label: '导出中心', description: '交付格式' },
-];
-
 const outlineLevels: Array<{ value: OutlineLevel; label: string }> = [
   { value: 'total', label: '总纲' },
   { value: 'volume', label: '分卷' },
@@ -301,6 +291,9 @@ const routeProjectId = computed(() => {
 });
 
 const projectTitle = computed(() => project.value?.title ?? '加载项目中');
+const productionChainProfile = computed(() =>
+  getProductionChainProfile(project.value?.type),
+);
 const projectPathLabel = computed(() => `项目中心 / ${projectTitle.value || routeProjectId.value || '当前项目'}`);
 const projectProgress = computed(() => project.value?.progress ?? 0);
 const projectStatus = computed(() => project.value?.status ?? 'unknown');
@@ -309,7 +302,6 @@ const updatedAtLabel = computed(() =>
   project.value ? formatUpdatedAt(project.value.updatedAt) : '',
 );
 const projectSetup = computed(() => project.value?.settings.projectSetup ?? {});
-const isShortDramaProject = computed(() => project.value?.type === 'short_drama');
 const outlineDocuments = computed(() =>
   documents.value.filter((document) => document.type === 'outline'),
 );
@@ -367,28 +359,6 @@ const selectedExportTargetLabel = computed(
     exportTargets.find((target) => target.key === selectedExportTarget.value)
       ?.label ?? '未选择',
 );
-const productionDocumentOptions = computed(() => {
-  const labels = ['EP01', 'EP02', 'EP03', 'EP04'];
-  const options = labels.map((label, index) => {
-    const document = editableDocuments.value[index];
-    return {
-      label,
-      value: document?.id ?? `empty-${label}`,
-      title: document?.title ?? `${label} / 待新建`,
-      available: Boolean(document),
-    };
-  });
-
-  return [
-    ...options,
-    {
-      label: '新建',
-      value: 'new',
-      title: '创建新的正文文档',
-      available: true,
-    },
-  ];
-});
 const editorWordCount = computed(() => countTextWords(editorContent.value));
 const selectedMaterial = computed(() => {
   return (
@@ -429,109 +399,52 @@ const lockedSettings = computed(() => {
     settings.autoSave ? '自动保存：开启' : '自动保存：关闭',
   ].filter(Boolean);
 });
-const workflowCards = computed<WorkflowCard[]>(() => [
-  {
-    title: '创作设定',
-    status: settingCompleteness.value >= 80 ? '完成' : '待补全',
-    detail: `${settingCompleteness.value}% 完整度`,
-    score: settingCompleteness.value,
-  },
-  {
-    title: '大纲',
-    status: outlineDocuments.value.length > 0 ? '已建立' : '待生成',
-    detail: `${outlineDocuments.value.length} 个大纲文档`,
-    score: outlineDocuments.value.length > 0 ? 100 : 20,
-  },
-  {
-    title: '正文',
-    status: editableDocuments.value.length > 0 ? '生产中' : '未开始',
-    detail: `${editableDocuments.value.length} 个正文相关文档`,
-    score: Math.min(100, editableDocuments.value.length * 24),
-  },
-  {
-    title: '审核',
-    status: reviewDocuments.value.length > 0 ? '已有记录' : '待审核',
-    detail: `${reviewDocuments.value.length} 条审核文档`,
-    score: reviewDocuments.value.length > 0 ? 75 : 10,
-  },
-  {
-    title: '导出',
-    status: exportDocuments.value.length > 0 ? '已导出' : '待导出',
-    detail: `${exportDocuments.value.length} 个导出文档`,
-    score: exportDocuments.value.length > 0 ? 100 : 10,
-  },
-]);
-const overviewPendingItems = computed(() => {
-  const items: string[] = [];
-
-  if (settingCompleteness.value < 100) {
-    items.push('补齐创作设定，锁定风格与审核规则');
-  }
-  if (outlineDocuments.value.length === 0) {
-    items.push('进入大纲工厂，生成可执行结构');
-  }
-  if (reviewDocuments.value.length === 0) {
-    items.push('运行项目审核，检查前后矛盾与风险');
-  }
-  if (exportDocuments.value.length === 0) {
-    items.push('完成导出中心版本，形成可交付稿');
-  }
-
-  return items.slice(0, 3);
-});
-const overviewFlowCards = computed(() => [
-  {
-    title: '创作设定',
-    status: settingCompleteness.value >= 80 ? '已完成' : '待处理',
-    detail: `${settingCompleteness.value}% 完整度`,
-    tone: settingCompleteness.value >= 80 ? 'success' : 'warning',
-  },
-  {
-    title: '资料库',
-    status: materials.value.length > 0 ? '已完成' : '待开始',
-    detail: `${materials.value.length} 条资料`,
-    tone: materials.value.length > 0 ? 'success' : 'idle',
-  },
-  {
-    title: '大纲工厂',
-    status: outlineDocuments.value.length > 0 ? '运行中' : '待开始',
-    detail: `${outlineDocuments.value.length} 个大纲文档`,
-    tone: outlineDocuments.value.length > 0 ? 'running' : 'idle',
-  },
-  {
-    title: '正文生产',
-    status: editableDocuments.value.length > 0 ? '已完成' : '待开始',
-    detail: `${editableDocuments.value.length} 个正文相关文档`,
-    tone: editableDocuments.value.length > 0 ? 'success' : 'idle',
-  },
-  {
-    title: '审核工厂',
-    status: reviewDocuments.value.length > 0 ? '待处理' : '待开始',
-    detail: `${reviewDocuments.value.length} 条审核记录`,
-    tone: reviewDocuments.value.length > 0 ? 'warning' : 'idle',
-  },
-  {
-    title: '导出中心',
-    status: exportDocuments.value.length > 0 ? '已完成' : '待开始',
-    detail: `${exportDocuments.value.length} 个导出文件`,
-    tone: exportDocuments.value.length > 0 ? 'success' : 'idle',
-  },
-]);
-const nextRecommendedAction = computed(() => {
-  if (settingCompleteness.value < 80) {
-    return '先补全创作设定，锁定风格、角色和审核规则。';
-  }
-  if (outlineDocuments.value.length === 0) {
-    return '进入大纲工厂，生成可执行的结构和章节计划。';
-  }
-  if (editableDocuments.value.length === 0) {
-    return '进入正文生产，创建第一版正文草稿。';
-  }
-  if (reviewDocuments.value.length === 0) {
-    return '进入审核工厂，检查前后矛盾、节奏和敏感词。';
-  }
-  return '进入导出中心，生成可交付版本。';
-});
+const workspaceNavItems = computed(() =>
+  buildWorkspaceNavItems(productionChainProfile.value),
+);
+const workflowCards = computed<WorkflowCard[]>(() =>
+  buildWorkflowCards(productionChainProfile.value, {
+    settingCompleteness: settingCompleteness.value,
+    materialsCount: materials.value.length,
+    outlineCount: outlineDocuments.value.length,
+    editableCount: editableDocuments.value.length,
+    reviewCount: reviewDocuments.value.length,
+    exportCount: exportDocuments.value.length,
+  }),
+);
+const overviewPendingItems = computed(() =>
+  buildOverviewPendingItems(productionChainProfile.value, {
+    settingCompleteness: settingCompleteness.value,
+    materialsCount: materials.value.length,
+    outlineCount: outlineDocuments.value.length,
+    editableCount: editableDocuments.value.length,
+    reviewCount: reviewDocuments.value.length,
+    exportCount: exportDocuments.value.length,
+  }),
+);
+const overviewFlowCards = computed(() =>
+  buildOverviewFlowCards(productionChainProfile.value, {
+    settingCompleteness: settingCompleteness.value,
+    materialsCount: materials.value.length,
+    outlineCount: outlineDocuments.value.length,
+    editableCount: editableDocuments.value.length,
+    reviewCount: reviewDocuments.value.length,
+    exportCount: exportDocuments.value.length,
+  }),
+);
+const productionEntryCards = computed<ProductionEntryCard[]>(() =>
+  buildProductionEntryCards(productionChainProfile.value),
+);
+const nextRecommendedAction = computed(() =>
+  buildNextRecommendedAction(productionChainProfile.value, {
+    settingCompleteness: settingCompleteness.value,
+    materialsCount: materials.value.length,
+    outlineCount: outlineDocuments.value.length,
+    editableCount: editableDocuments.value.length,
+    reviewCount: reviewDocuments.value.length,
+    exportCount: exportDocuments.value.length,
+  }),
+);
 const totalPlotOutline = computed(() => {
   const outline = outlineDocuments.value[0]?.content;
   if (outline) {
@@ -563,26 +476,12 @@ const episodeStructure = computed(() => {
     summary: `第 ${index + 1} 集结构待生成，候选区会先承接 AI 结果。`,
   }));
 });
-const shortDramaRules = computed(() => [
-  {
-    label: '一钩',
-    value: getSetupValue(['firstHookPosition']),
-  },
-  {
-    label: '二钩',
-    value: getSetupValue(['secondHookPosition']),
-  },
-  {
-    label: '付费点',
-    value: getSetupValue(['paywallPosition']),
-  },
-  {
-    label: '结尾悬念',
-    value: getSetupValue(['coreConflict']) === '未设置'
-      ? '每集结尾保留一个未解决问题'
-      : `围绕“${getSetupValue(['coreConflict'])}”制造悬念`,
-  },
-]);
+const productionRules = computed(() =>
+  buildProductionRules(project.value?.type, getSetupValue),
+);
+const productionDocumentOptions = computed(() =>
+  buildProductionDocumentOptions(productionChainProfile.value, editableDocuments.value),
+);
 const rewriteDiff = computed(() => {
   const originalLength = countTextWords(rewriteOriginal.value);
   const resultLength = countTextWords(rewriteResult.value);
@@ -1317,6 +1216,9 @@ function getProjectTypeLabel(type?: TextProjectType): string {
     novel: '小说项目',
     short_drama: '短剧项目',
     business_copy: '商业文案',
+    xiaohongshu: '小红书文案',
+    business_bp: '商业 BP',
+    investment_copy: '招商文案',
     document: '项目文档',
     custom: '自定义文本',
   };
@@ -1386,8 +1288,8 @@ function formatUpdatedAt(value: string): string {
               <header class="tm-overview-title tm-overview-hero">
                 <div>
                   <p>Project Overview</p>
-                  <h2>项目总览</h2>
-                  <span>只展示决策信息和下一步动作，不承载长篇编辑。</span>
+                  <h2>{{ productionChainProfile.typeLabel }}总览</h2>
+                  <span>{{ productionChainProfile.heroNote }}</span>
                 </div>
                 <strong>{{ getStatusLabel(projectStatus) }}</strong>
               </header>
@@ -1432,7 +1334,7 @@ function formatUpdatedAt(value: string): string {
                 <header>
                   <div>
                     <p>Production Stages</p>
-                    <h3>生产阶段</h3>
+                    <h3>{{ productionChainProfile.labels.outline }} / {{ productionChainProfile.labels.editor }}</h3>
                   </div>
                   <span>阶段状态用于判断下一步，不展开正文编辑。</span>
                 </header>
@@ -1445,6 +1347,30 @@ function formatUpdatedAt(value: string): string {
                     </div>
                     <p>{{ card.detail }}</p>
                   </article>
+                </div>
+              </section>
+
+              <section class="tm-overview-entry">
+                <header>
+                  <div>
+                    <p>Quick Entry</p>
+                    <h3>{{ productionChainProfile.typeLabel }}入口</h3>
+                  </div>
+                  <span>直接跳转到当前类型最常用的生产节点。</span>
+                </header>
+
+                <div class="tm-overview-entry-grid">
+                  <button
+                    v-for="entry in productionEntryCards"
+                    :key="entry.title"
+                    type="button"
+                    :class="['tm-entry-card', `tone-${entry.tone ?? 'idle'}`]"
+                    @click="setActiveStep(entry.step); lastAction = `已切换到 ${entry.title}`"
+                  >
+                    <strong>{{ entry.title }}</strong>
+                    <p>{{ entry.description }}</p>
+                    <span>进入 {{ entry.step }}</span>
+                  </button>
                 </div>
               </section>
 
@@ -1563,7 +1489,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Settings</p>
-                <h2>创作设定</h2>
+                <h2>{{ productionChainProfile.labels.settings }}</h2>
               </div>
               <span class="tm-completeness-pill">
                 <span class="tm-pill-dot" :class="settingCompleteness >= 80 ? 'done' : settingCompleteness >= 40 ? 'warn' : 'idle'" />
@@ -1690,7 +1616,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Materials</p>
-                <h2>资料库</h2>
+                <h2>{{ productionChainProfile.labels.materials }}</h2>
               </div>
               <span class="tm-completeness-pill">
                 <span class="tm-pill-dot" :class="materials.length > 0 ? 'done' : 'idle'" />
@@ -1769,7 +1695,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Outline Factory</p>
-                <h2>大纲工厂</h2>
+                <h2>{{ productionChainProfile.labels.outline }}</h2>
               </div>
               <span class="tm-completeness-pill">
                 <span class="tm-pill-dot" :class="outlineDocuments.length > 0 ? 'done' : 'idle'" />
@@ -1827,8 +1753,8 @@ function formatUpdatedAt(value: string): string {
               </article>
             </section>
 
-            <section v-if="isShortDramaProject" class="tm-short-drama-rules">
-              <article v-for="rule in shortDramaRules" :key="rule.label">
+            <section v-if="productionRules.length" class="tm-short-drama-rules">
+              <article v-for="rule in productionRules" :key="rule.label">
                 <span>{{ rule.label }}</span>
                 <strong>{{ rule.value }}</strong>
               </article>
@@ -1848,7 +1774,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Editor</p>
-                <h2>正文生产</h2>
+                <h2>{{ productionChainProfile.labels.editor }}</h2>
               </div>
               <span class="tm-completeness-pill">
                 <span class="tm-pill-dot" :class="editorWordCount > 0 ? 'done' : 'idle'" />
@@ -1919,7 +1845,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Rewrite Factory</p>
-                <h2>改写工厂</h2>
+                <h2>{{ productionChainProfile.labels.rewrite }}</h2>
               </div>
               <button type="button" class="tm-primary-action" @click="generateRewriteCandidate">
                 生成改写候选
@@ -2001,7 +1927,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Review Factory</p>
-                <h2>审核工厂</h2>
+                <h2>{{ productionChainProfile.labels.review }}</h2>
               </div>
               <button
                 type="button"
@@ -2127,7 +2053,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Versions</p>
-                <h2>版本记录</h2>
+                <h2>{{ productionChainProfile.labels.versions }}</h2>
               </div>
             </header>
 
@@ -2209,7 +2135,7 @@ function formatUpdatedAt(value: string): string {
             <header class="tm-section-header">
               <div>
                 <p>Export</p>
-                <h2>导出中心</h2>
+                <h2>{{ productionChainProfile.labels.export }}</h2>
               </div>
               <button
                 type="button"
@@ -2613,6 +2539,61 @@ function formatUpdatedAt(value: string): string {
   line-height: 1.6;
 }
 
+.tm-overview-entry {
+  margin-top: 12px;
+}
+
+.tm-overview-entry header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.tm-overview-entry header h3 {
+  margin: 5px 0 0;
+  font-size: 18px;
+}
+
+.tm-overview-entry header span {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+}
+
+.tm-overview-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tm-entry-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  min-height: 110px;
+  border: 1px solid var(--tm-border);
+  border-radius: var(--tm-radius-control);
+  background: var(--tm-card);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.tm-entry-card strong {
+  font-size: 17px;
+}
+
+.tm-entry-card p {
+  color: var(--tm-text-soft);
+  margin: 0;
+  line-height: 1.55;
+}
+
+.tm-entry-card span {
+  color: var(--tm-text-muted);
+  font-size: 12px;
+}
+
 .tone-success {
   border-color: rgba(72, 213, 138, 0.62);
 }
@@ -2663,6 +2644,22 @@ function formatUpdatedAt(value: string): string {
 .tone-idle em {
   background: rgba(132, 151, 190, 0.12);
   color: var(--tm-text-muted);
+}
+
+.tm-entry-card.tone-success {
+  border-color: rgba(72, 213, 138, 0.54);
+}
+
+.tm-entry-card.tone-running {
+  border-color: rgba(87, 112, 255, 0.62);
+}
+
+.tm-entry-card.tone-warning {
+  border-color: rgba(244, 163, 64, 0.62);
+}
+
+.tm-entry-card.tone-idle {
+  border-color: rgba(132, 151, 190, 0.26);
 }
 
 .tm-overview-next {
@@ -3621,6 +3618,10 @@ function formatUpdatedAt(value: string): string {
   .tm-editor-shell {
     grid-template-columns: 1fr;
   }
+
+  .tm-overview-entry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -3641,7 +3642,8 @@ function formatUpdatedAt(value: string): string {
   .tm-issue-actions,
   .tm-version-actions,
   .tm-export-format-grid,
-  .tm-export-targets {
+  .tm-export-targets,
+  .tm-overview-entry-grid {
     grid-template-columns: 1fr;
   }
 }

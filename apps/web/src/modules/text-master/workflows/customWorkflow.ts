@@ -1,0 +1,57 @@
+import type { WorkflowSpec } from './types';
+
+export const customWorkflow: WorkflowSpec = {
+  id: 'workflow-custom',
+  name: '自定义生产链路',
+  description: '面向可配置项目，保留简洁但完整的起草、执行、审核和导出闭环。',
+  workspaceType: 'generic-text',
+  defaultStageId: 'brief',
+  exportTargets: ['markdown', 'txt', 'json'],
+  stages: [
+    {
+      id: 'brief',
+      title: '项目简报',
+      description: '定义目标、受众、风格和交付要求。',
+      component: 'generic',
+      requiredInputs: ['title', 'summary'],
+      outputs: ['projectBrief'],
+      aiActions: [{ id: 'generate-brief', label: '生成简报', type: 'generate', primary: true }],
+    },
+    {
+      id: 'plan',
+      title: '执行计划',
+      description: '把自定义需求拆成可执行的阶段。',
+      component: 'generic',
+      requiredInputs: ['projectBrief'],
+      outputs: ['executionPlan'],
+      aiActions: [{ id: 'generate-plan', label: '生成计划', type: 'outline', primary: true }],
+    },
+    {
+      id: 'draft',
+      title: '正文工厂',
+      description: '输出核心草稿或成品内容。',
+      component: 'generic',
+      requiredInputs: ['executionPlan'],
+      outputs: ['draft'],
+      aiActions: [{ id: 'generate-draft', label: '生成草稿', type: 'generate', primary: true }],
+    },
+    {
+      id: 'review',
+      title: '审核工厂',
+      description: '执行一致性、风险和格式检查。',
+      component: 'generic',
+      requiredInputs: ['draft'],
+      outputs: ['reviewIssues'],
+      aiActions: [{ id: 'review-custom', label: '执行审核', type: 'review', primary: true }],
+    },
+    {
+      id: 'export',
+      title: '导出中心',
+      description: '导出 Markdown、TXT 或 JSON 版本。',
+      component: 'generic',
+      requiredInputs: ['document'],
+      outputs: ['exportFile'],
+      aiActions: [{ id: 'export-custom', label: '执行导出', type: 'export', primary: true }],
+    },
+  ],
+};

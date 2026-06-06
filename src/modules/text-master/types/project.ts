@@ -1,3 +1,5 @@
+import type { WorkspaceType } from '../workflows/types';
+
 export type TextProjectType =
   | 'novel'
   | 'short_drama'
@@ -31,6 +33,9 @@ export type TextProject = {
   id: string;
   title: string;
   type: TextProjectType;
+  workflowId: string;
+  workspaceType: WorkspaceType;
+  currentStageId: string;
   status: TextProjectStatus;
   summary: string;
   wordCount: number;

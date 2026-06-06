@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+﻿import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +27,8 @@ const ZIP_PATH = path.join(RUN_DIR, `text-master-visual-audit-${TIMESTAMP}.zip`)
 const AUDIT_LOG = path.join(LOG_DIR, 'audit.log');
 const DEV_STDOUT_LOG = path.join(LOG_DIR, 'dev-server.out.log');
 const DEV_STDERR_LOG = path.join(LOG_DIR, 'dev-server.err.log');
+const API_STDOUT_LOG = path.join(LOG_DIR, 'api-server.out.log');
+const API_STDERR_LOG = path.join(LOG_DIR, 'api-server.err.log');
 const PLAYWRIGHT_INSTALL_LOG = path.join(LOG_DIR, 'playwright-install.log');
 const PLAYWRIGHT_BROWSER_LOG = path.join(LOG_DIR, 'playwright-browser-install.log');
 const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -137,6 +139,7 @@ process.exit(process.exitCode ?? 0);
 async function main() {
   ensureDirectories();
   logLine('Text Master visual audit started.');
+  let apiServer = null;
   let devServer = null;
   let browser = null;
 
@@ -156,6 +159,7 @@ async function main() {
       auditState.baseUrl = normalizeBaseUrl(ENV_BASE_URL);
       logLine(`Using existing service from TEXTMASTER_AUDIT_URL: ${auditState.baseUrl}`);
     } else {
+      apiServer = await startApiServer();
       devServer = await startDevServer();
       auditState.baseUrl = devServer.url;
       auditState.startedDevServer = true;
@@ -177,6 +181,10 @@ async function main() {
 
     if (devServer) {
       await stopDevServer(devServer);
+    }
+
+    if (apiServer) {
+      await stopApiServer(apiServer);
     }
 
     auditState.finishedAt = new Date().toISOString();
@@ -409,6 +417,37 @@ async function startDevServer() {
   return { child, stdout, stderr, url };
 }
 
+async function startApiServer() {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
+  if (!packageJson.scripts?.['dev:api']) {
+    throw new Error('The visual audit needs a dev:api script in package.json.');
+  }
+
+  const apiCommand = commandForSpawn(npmCommand(), ['run', 'dev:api']);
+  const child = spawn(apiCommand.command, apiCommand.args, {
+    cwd: ROOT_DIR,
+    env: { ...process.env, FORCE_COLOR: '0' },
+    shell: false,
+    windowsHide: true,
+  });
+
+  const stdout = fs.createWriteStream(API_STDOUT_LOG, { flags: 'a' });
+  const stderr = fs.createWriteStream(API_STDERR_LOG, { flags: 'a' });
+  child.stdout?.pipe(stdout);
+  child.stderr?.pipe(stderr);
+
+  let output = '';
+  child.stdout?.on('data', (chunk) => {
+    output += stripAnsi(chunk.toString());
+  });
+  child.stderr?.on('data', (chunk) => {
+    output += stripAnsi(chunk.toString());
+  });
+
+  await waitForApiServerUrl(child, () => output);
+  return { child, stdout, stderr };
+}
+
 async function waitForDevServerUrl(child, getOutput) {
   const startedAt = Date.now();
 
@@ -430,6 +469,29 @@ async function waitForDevServerUrl(child, getOutput) {
   }
 
   throw new Error('Timed out waiting for dev server URL.');
+}
+
+async function waitForApiServerUrl(child, getOutput) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 60000) {
+    if (child.exitCode !== null) {
+      throw new Error(`api server exited early with code ${child.exitCode}.`);
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:4100/api/health', { method: 'GET' });
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // ignore and keep polling
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error(`Timed out waiting for api server URL. Output: ${getOutput()}`);
 }
 
 async function canFetch(url) {
@@ -459,6 +521,26 @@ async function stopDevServer(devServer) {
   await waitForChildClose(child, 5000);
   devServer?.stdout?.destroy();
   devServer?.stderr?.destroy();
+}
+
+async function stopApiServer(apiServer) {
+  const child = apiServer?.child ?? apiServer;
+  if (!child || child.exitCode !== null) {
+    apiServer?.stdout?.destroy();
+    apiServer?.stderr?.destroy();
+    return;
+  }
+
+  logLine(`Stopping api server PID ${child.pid}.`);
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    child.kill('SIGTERM');
+  }
+
+  await waitForChildClose(child, 5000);
+  apiServer?.stdout?.destroy();
+  apiServer?.stderr?.destroy();
 }
 
 function waitForChildClose(child, timeoutMs) {
@@ -3106,33 +3188,33 @@ function clampScore(value, min, max) {
 
 async function inspectBrainHubAdapter() {
   const checks = [
-    { key: 'manifest', path: 'src/integrations/brain-hub/manifest.ts' },
-    { key: 'launch', path: 'src/integrations/brain-hub/launch.ts' },
-    { key: 'launchContext', path: 'src/integrations/brain-hub/launchContext.ts' },
-    { key: 'authAdapter', path: 'src/integrations/brain-hub/authAdapter.ts' },
-    { key: 'fileAdapter', path: 'src/integrations/brain-hub/fileAdapter.ts' },
-    { key: 'aiAdapter', path: 'src/integrations/brain-hub/aiAdapter.ts' },
-    { key: 'projectSyncAdapter', path: 'src/integrations/brain-hub/projectSyncAdapter.ts' },
-    { key: 'usageAdapter', path: 'src/integrations/brain-hub/usageAdapter.ts' },
-    { key: 'BrainHubRuntime', path: 'src/modules/text-master/runtime/BrainHubRuntime.ts' },
-    { key: 'LocalRuntime', path: 'src/modules/text-master/runtime/LocalRuntime.ts' },
-    { key: 'runtimeDetection', path: 'src/modules/text-master/runtime/runtimeDetection.ts' },
+    { key: 'manifest', path: 'apps/web/src/integrations/brain-hub/manifest.ts' },
+    { key: 'launch', path: 'apps/web/src/integrations/brain-hub/launch.ts' },
+    { key: 'launchContext', path: 'apps/web/src/integrations/brain-hub/launchContext.ts' },
+    { key: 'authAdapter', path: 'apps/web/src/integrations/brain-hub/authAdapter.ts' },
+    { key: 'fileAdapter', path: 'apps/web/src/integrations/brain-hub/fileAdapter.ts' },
+    { key: 'aiAdapter', path: 'apps/web/src/integrations/brain-hub/aiAdapter.ts' },
+    { key: 'projectSyncAdapter', path: 'apps/web/src/integrations/brain-hub/projectSyncAdapter.ts' },
+    { key: 'usageAdapter', path: 'apps/web/src/integrations/brain-hub/usageAdapter.ts' },
+    { key: 'BrainHubRuntime', path: 'apps/web/src/modules/text-master/runtime/BrainHubRuntime.ts' },
+    { key: 'LocalRuntime', path: 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts' },
+    { key: 'runtimeDetection', path: 'apps/web/src/modules/text-master/runtime/runtimeDetection.ts' },
   ];
 
   const files = checks.map((item) => ({
     ...item,
     exists: fs.existsSync(path.join(ROOT_DIR, item.path)),
   }));
-  const localRuntimeText = readTextIfExists('src/modules/text-master/runtime/LocalRuntime.ts');
+  const localRuntimeText = readTextIfExists('apps/web/src/modules/text-master/runtime/LocalRuntime.ts');
   const pageTexts = [
-    'src/modules/text-master/pages/Home.vue',
-    'src/modules/text-master/pages/ProjectCenter.vue',
-    'src/modules/text-master/pages/ProjectCreate.vue',
-    'src/modules/text-master/pages/ProjectWorkspace.vue',
-    'src/modules/text-master/pages/Templates.vue',
-    'src/modules/text-master/pages/Exports.vue',
-    'src/modules/text-master/pages/Settings.vue',
-    'src/modules/text-master/pages/UserProfile.vue',
+    'apps/web/src/modules/text-master/pages/Home.vue',
+    'apps/web/src/modules/text-master/pages/ProjectCenter.vue',
+    'apps/web/src/modules/text-master/pages/ProjectCreate.vue',
+    'apps/web/src/modules/text-master/pages/ProjectWorkspace.vue',
+    'apps/web/src/modules/text-master/pages/Templates.vue',
+    'apps/web/src/modules/text-master/pages/Exports.vue',
+    'apps/web/src/modules/text-master/pages/Settings.vue',
+    'apps/web/src/modules/text-master/pages/UserProfile.vue',
   ].map(readTextIfExists);
 
   return {

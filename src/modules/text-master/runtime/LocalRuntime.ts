@@ -61,6 +61,9 @@ export function createLocalRuntime(
       const project = await createProject({
         title: input.title,
         type: input.type,
+        workflowId: input.workflowId,
+        workspaceType: input.workspaceType,
+        currentStageId: input.currentStageId,
         summary: input.summary,
         settings: input.settings,
       });

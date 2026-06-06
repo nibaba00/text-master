@@ -255,7 +255,7 @@ const storageDataCount = computed(() => {
       <div>
         <p>Settings</p>
         <h1>设置</h1>
-        <span>Text Master 可独立运行；Brain Hub 只是可选启动与同步适配层。</span>
+        <span>Text Master 独立运行，Brain Hub 仅作可选适配层。</span>
       </div>
       <div class="tm-settings-actions">
         <button type="button" @click="resetAllSettings">恢复默认</button>
@@ -272,7 +272,7 @@ const storageDataCount = computed(() => {
       <article class="tm-settings-card tm-runtime-card">
         <header>
           <p>Runtime</p>
-          <h2>运行模式设置</h2>
+          <h2>运行模式</h2>
         </header>
         <div class="tm-runtime-switch" aria-label="Runtime detection">
           <span :class="{ active: activeRuntimeMode === 'local' }">Local Mode</span>
@@ -291,7 +291,7 @@ const storageDataCount = computed(() => {
       <article class="tm-settings-card tm-ai-card">
         <header>
           <p>AI Provider</p>
-          <h2>AI 模型设置</h2>
+          <h2>AI Provider</h2>
         </header>
 
         <!-- Provider 选择 -->
@@ -423,7 +423,7 @@ const storageDataCount = computed(() => {
         </label>
         <label class="tm-toggle-row">
           <input v-model="exportSettings.syncBrainHubFiles" type="checkbox" />
-          <span>同步 Brain Hub 文件库 Mock</span>
+          <span>同步 Brain Hub 文件库</span>
         </label>
       </article>
 
@@ -434,8 +434,7 @@ const storageDataCount = computed(() => {
         </header>
         <strong class="tm-adapter-status">{{ hubAdapterStatus }}</strong>
         <p>
-          Brain Hub 不是 Text Master 的运行前置依赖。没有 Hub Context 时，应用继续使用
-          LocalRuntime、本地 Mock AI 和本地导出。
+          没有 Hub Context 时，继续使用 LocalRuntime、本地 Mock AI 和本地导出。
         </p>
         <dl>
           <div v-for="row in adapterRows" :key="row.label">
@@ -456,7 +455,7 @@ const storageDataCount = computed(() => {
           <span class="tm-status-ok">默认</span>
         </p>
         <p class="tm-provider-note">
-          当前使用浏览器 LocalStorage 持久化。后续支持 IndexedDB / SQLite / Local File。
+          当前使用浏览器 LocalStorage。后续可切换到 IndexedDB / SQLite / Local File。
           当前存储 {{ storageDataCount }} 条数据记录。
         </p>
 
@@ -544,10 +543,10 @@ const storageDataCount = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px;
   max-width: var(--tm-page-max-width);
   margin: 10px auto 0;
-  padding: 14px;
+  padding: 12px;
 }
 
 .tm-settings-header p,
@@ -596,10 +595,10 @@ const storageDataCount = computed(() => {
 .tm-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   max-width: var(--tm-page-max-width);
   margin: 10px auto 0;
-  max-height: calc(100vh - var(--tm-nav-height) - 230px);
+  max-height: calc(100vh - var(--tm-nav-height) - 214px);
   overflow: auto;
 }
 

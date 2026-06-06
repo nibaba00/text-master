@@ -11,6 +11,7 @@ import type {
   TextProjectStatus,
   TextProjectType,
 } from '../types/project';
+import { getWorkflowById } from '../workflows/workflowRegistry';
 
 const projects = ref<TextProject[]>([]);
 const searchText = ref('');
@@ -78,6 +79,10 @@ function getStatusLabel(status: TextProjectStatus): string {
   return statusOptions.find((item) => item.value === status)?.label ?? status;
 }
 
+function getWorkflowLabel(workflowId: string): string {
+  return getWorkflowById(workflowId).name;
+}
+
 function formatUpdatedAt(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -97,7 +102,7 @@ function formatUpdatedAt(value: string): string {
       <div>
         <p>Local Project Center</p>
         <h1>项目中心</h1>
-        <span>Text Master 独立管理本地项目，不依赖 Brain Hub 子路径。</span>
+        <span>本地项目列表，按类型、状态和关键词快速筛选。</span>
       </div>
       <RouterLink
         class="tm-button tm-button-primary"
@@ -169,7 +174,7 @@ function formatUpdatedAt(value: string): string {
       >
         <header>
           <div>
-            <span>{{ getTypeLabel(project.type) }}</span>
+            <span>{{ getTypeLabel(project.type) }} / {{ getWorkflowLabel(project.workflowId) }}</span>
             <h2>{{ project.title }}</h2>
           </div>
           <strong>{{ getStatusLabel(project.status) }}</strong>
@@ -351,8 +356,9 @@ function formatUpdatedAt(value: string): string {
 
 .tm-project-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  width: min(100%, var(--tm-page-max-width));
   max-width: var(--tm-page-max-width);
   max-height: calc(100vh - var(--tm-nav-height) - 284px);
   overflow: auto;
@@ -362,20 +368,20 @@ function formatUpdatedAt(value: string): string {
 .tm-project-card,
 .tm-empty-card {
   min-width: 0;
-  padding: 12px;
+  padding: 8px;
 }
 
 .tm-project-card header {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
 .tm-project-card h2 {
-  margin: 6px 0 0;
-  font-size: 18px;
-  line-height: 1.3;
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .tm-project-card header strong {
@@ -383,61 +389,67 @@ function formatUpdatedAt(value: string): string {
   border-radius: 999px;
   background: #111113;
   color: #d4d4d8;
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-size: 12px;
   white-space: nowrap;
 }
 
 .tm-project-card p,
 .tm-empty-card p {
-  min-height: 54px;
-  margin: 14px 0 0;
+  min-height: 36px;
+  margin: 8px 0 0;
   color: #a1a1aa;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .tm-project-progress {
   display: grid;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .tm-project-progress > div {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .tm-project-progress meter {
   width: 100%;
-  height: 10px;
+  height: 8px;
 }
 
 .tm-project-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 16px 0 0;
+  gap: 6px;
+  margin: 10px 0 0;
 }
 
 .tm-project-meta div {
   border-radius: 8px;
   background: #111113;
-  padding: 12px;
+  padding: 8px;
 }
 
 .tm-project-meta dd {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: #f4f4f5;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .tm-project-card footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tm-project-card footer .tm-button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .tm-empty-card {

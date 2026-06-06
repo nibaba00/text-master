@@ -11,6 +11,8 @@ const RUN_DIR = path.join(ROOT_DIR, 'artifacts', 'text-master-desktop', TIMESTAM
 const LOG_DIR = path.join(RUN_DIR, 'logs');
 const DEV_STDOUT_LOG = path.join(LOG_DIR, 'dev-server.out.log');
 const DEV_STDERR_LOG = path.join(LOG_DIR, 'dev-server.err.log');
+const API_STDOUT_LOG = path.join(LOG_DIR, 'api-server.out.log');
+const API_STDERR_LOG = path.join(LOG_DIR, 'api-server.err.log');
 
 const ENV_URL = process.env.TEXTMASTER_DESKTOP_URL?.trim();
 const BASE_PATH = normalizeBasePath(process.env.TEXTMASTER_DESKTOP_BASE_PATH ?? '');
@@ -58,6 +60,7 @@ async function main() {
   }
 
   let devServer = null;
+  let apiServer = null;
   let desktopProcess = null;
 
   const cleanup = async () => {
@@ -67,6 +70,10 @@ async function main() {
 
     if (devServer) {
       await stopDevServer(devServer.child);
+    }
+
+    if (apiServer) {
+      await stopApiServer(apiServer);
     }
   };
 
@@ -80,6 +87,10 @@ async function main() {
   });
 
   try {
+    if (!ENV_URL) {
+      apiServer = await startApiServer();
+    }
+
     const baseUrl = ENV_URL ? normalizeBaseUrl(ENV_URL) : (devServer = await startDevServer(devScriptName)).url;
     const launchUrl = joinUrl(baseUrl, routeWithBasePath(ENTRY_PATH));
     const args = buildDesktopArgs(browser, launchUrl);
@@ -152,6 +163,31 @@ async function startDevServer(devScriptName) {
   return { child, url };
 }
 
+async function startApiServer() {
+  const child = spawn(npmCommand(), ['run', 'dev:api'], {
+    cwd: ROOT_DIR,
+    env: { ...process.env, FORCE_COLOR: '0' },
+    shell: process.platform === 'win32',
+    windowsHide: true,
+  });
+
+  const stdout = fs.createWriteStream(API_STDOUT_LOG, { flags: 'a' });
+  const stderr = fs.createWriteStream(API_STDERR_LOG, { flags: 'a' });
+  child.stdout?.pipe(stdout);
+  child.stderr?.pipe(stderr);
+
+  let output = '';
+  child.stdout?.on('data', (chunk) => {
+    output += stripAnsi(chunk.toString());
+  });
+  child.stderr?.on('data', (chunk) => {
+    output += stripAnsi(chunk.toString());
+  });
+
+  await waitForApiServer(child, () => output);
+  return { child, stdout, stderr };
+}
+
 async function waitForDevServerUrl(child, getOutput) {
   const startedAt = Date.now();
 
@@ -172,6 +208,29 @@ async function waitForDevServerUrl(child, getOutput) {
   fail('Timed out waiting for the local Text Master dev server.');
 }
 
+async function waitForApiServer(child, getOutput) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 30000) {
+    if (child.exitCode !== null) {
+      fail(`API server exited before it became reachable. See ${path.relative(ROOT_DIR, API_STDERR_LOG)}.`);
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:4100/api/health');
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // keep polling
+    }
+
+    await sleep(300);
+  }
+
+  fail(`Timed out waiting for the local Text Master API server. Output: ${getOutput()}`);
+}
+
 async function stopDevServer(child) {
   if (!child || child.exitCode !== null) {
     return;
@@ -182,6 +241,24 @@ async function stopDevServer(child) {
   } else {
     child.kill('SIGTERM');
   }
+}
+
+async function stopApiServer(apiServer) {
+  const child = apiServer?.child ?? apiServer;
+  if (!child || child.exitCode !== null) {
+    apiServer?.stdout?.destroy();
+    apiServer?.stderr?.destroy();
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    child.kill('SIGTERM');
+  }
+
+  apiServer?.stdout?.destroy();
+  apiServer?.stderr?.destroy();
 }
 
 function findDesktopBrowser() {

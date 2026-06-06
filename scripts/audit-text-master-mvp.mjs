@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -24,17 +24,17 @@ fs.mkdirSync(LOG_DIR, { recursive: true });
 // --- 数据持久化 (20 分) ---
 const dataChecks = [
   fileCheck('StorageDriver 接口', [
-    'src/modules/text-master/services/storage/storageDriver.ts',
+    'apps/web/src/modules/text-master/services/storage/storageDriver.ts',
   ], 5),
   fileCheck('LocalStorageDriver 实现', [
-    'src/modules/text-master/services/storage/localStorageDriver.ts',
+    'apps/web/src/modules/text-master/services/storage/localStorageDriver.ts',
   ], 5),
-  contentCheck('导入/导出备份函数', 'src/modules/text-master/services/localStorageRepository.ts', [
+  contentCheck('导入/导出备份函数', 'apps/web/src/modules/text-master/services/localStorageRepository.ts', [
     'exportAllLocalData',
     'importAllLocalData',
     'resetLocalData',
   ], 5),
-  contentCheck('main.ts 初始化 StorageDriver', 'src/main.ts', [
+  contentCheck('main.ts 初始化 StorageDriver', 'apps/web/src/main.ts', [
     'setStorageDriver',
     'createLocalStorageDriver',
   ], 5),
@@ -43,18 +43,18 @@ const dataChecks = [
 // --- 项目/设定/资料/文档 (20 分) ---
 const dataModelChecks = [
   fileCheck('项目类型与 service', [
-    'src/modules/text-master/types/project.ts',
-    'src/modules/text-master/services/projectService.ts',
+    'apps/web/src/modules/text-master/types/project.ts',
+    'apps/web/src/modules/text-master/services/projectService.ts',
   ], 5),
   fileCheck('文档类型与 service', [
-    'src/modules/text-master/types/document.ts',
-    'src/modules/text-master/services/documentService.ts',
+    'apps/web/src/modules/text-master/types/document.ts',
+    'apps/web/src/modules/text-master/services/documentService.ts',
   ], 5),
   fileCheck('资料类型与 service', [
-    'src/modules/text-master/types/material.ts',
-    'src/modules/text-master/services/materialService.ts',
+    'apps/web/src/modules/text-master/types/material.ts',
+    'apps/web/src/modules/text-master/services/materialService.ts',
   ], 5),
-  contentCheck('LocalRuntime 创建项目 + 文档 + 简报', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('LocalRuntime 创建项目 + 文档 + 简报', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     'saveDocument',
     'createProject',
     'createRuntimeVersion',
@@ -64,23 +64,23 @@ const dataModelChecks = [
 // --- Job/Candidate/Version (25 分) ---
 const jobChecks = [
   fileCheck('Job/Candidate/Review 类型', [
-    'src/modules/text-master/types/production.ts',
+    'apps/web/src/modules/text-master/types/production.ts',
   ], 5),
   fileCheck('Job/Candidate/Version service', [
-    'src/modules/text-master/services/jobService.ts',
-    'src/modules/text-master/services/candidateService.ts',
-    'src/modules/text-master/services/versionService.ts',
+    'apps/web/src/modules/text-master/services/jobService.ts',
+    'apps/web/src/modules/text-master/services/candidateService.ts',
+    'apps/web/src/modules/text-master/services/versionService.ts',
   ], 5),
-  contentCheck('Candidate 不直接覆盖正文', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('Candidate 不直接覆盖正文', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     'createCandidate',
     'candidate',
     'provider.id',
   ], 5),
-  contentCheck('generateText 通过 Provider', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('generateText 通过 Provider', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     'getActiveProvider',
     'provider.run',
   ], 5),
-  contentCheck('Version 创建链路', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('Version 创建链路', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     'createVersion',
     'createRuntimeVersion',
     'manual_edit',
@@ -90,14 +90,14 @@ const jobChecks = [
 // --- 审核/修复 (15 分) ---
 const reviewChecks = [
   fileCheck('ReviewIssue service', [
-    'src/modules/text-master/services/reviewService.ts',
+    'apps/web/src/modules/text-master/services/reviewService.ts',
   ], 5),
-  contentCheck('审核链路: job → candidate → reviewIssue', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('审核链路: job → candidate → reviewIssue', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     'reviewText',
     'createReviewIssue',
     'createCandidate',
   ], 5),
-  contentCheck('审核问题结构', 'src/modules/text-master/types/production.ts', [
+  contentCheck('审核问题结构', 'apps/web/src/modules/text-master/types/production.ts', [
     'ReviewIssueLevel',
     'ReviewIssueStatus',
     'canAutoFix',
@@ -106,7 +106,7 @@ const reviewChecks = [
 
 // --- 导出 (10 分) ---
 const exportChecks = [
-  contentCheck('导出格式完整', 'src/modules/text-master/services/exportService.ts', [
+  contentCheck('导出格式完整', 'apps/web/src/modules/text-master/services/exportService.ts', [
     'markdown',
     'txt',
     'json',
@@ -114,11 +114,11 @@ const exportChecks = [
     'media-master-json',
     'novel-master-json',
   ], 4),
-  contentCheck('ExportRecord 生成', 'src/modules/text-master/services/exportService.ts', [
+  contentCheck('ExportRecord 生成', 'apps/web/src/modules/text-master/services/exportService.ts', [
     'createExportRecord',
     'listExportRecords',
   ], 3),
-  contentCheck('导出 version 生成', 'src/modules/text-master/runtime/LocalRuntime.ts', [
+  contentCheck('导出 version 生成', 'apps/web/src/modules/text-master/runtime/LocalRuntime.ts', [
     "operation: 'export'",
     'createRuntimeVersion',
   ], 3),
@@ -126,13 +126,13 @@ const exportChecks = [
 
 // --- 稳定性 (10 分) ---
 const stabilityChecks = [
-  contentCheck('错误处理', 'src/modules/text-master/services/localStorageRepository.ts', [
+  contentCheck('错误处理', 'apps/web/src/modules/text-master/services/localStorageRepository.ts', [
     'TextMasterServiceError',
     'runServiceAction',
   ], 5),
   fileCheck('Runtime + 回退', [
-    'src/modules/text-master/runtime/runtimeDetection.ts',
-    'src/modules/text-master/runtime/BrainHubRuntime.ts',
+    'apps/web/src/modules/text-master/runtime/runtimeDetection.ts',
+    'apps/web/src/modules/text-master/runtime/BrainHubRuntime.ts',
   ], 5),
 ];
 
@@ -228,34 +228,34 @@ function contentCheck(name, file, requiredPatterns, points) {
 }
 
 function checkProviderMock() {
-  const providerService = readFileIfExists('src/modules/text-master/services/modelProviderService.ts');
+  const providerService = readFileIfExists('apps/web/src/modules/text-master/services/modelProviderService.ts');
   const hasMock = providerService.includes('createMockProvider') || providerService.includes("id: 'mock'");
   return { available: hasMock, label: 'MockProvider', note: '默认可用' };
 }
 
 function checkProviderDeepseek() {
-  const providerService = readFileIfExists('src/modules/text-master/services/modelProviderService.ts');
-  const deepseekService = readFileIfExists('src/modules/text-master/services/deepseekProviderService.ts');
-  const hasFile = fs.existsSync(path.join(ROOT_DIR, 'src/modules/text-master/services/deepseekProviderService.ts'));
+  const providerService = readFileIfExists('apps/web/src/modules/text-master/services/modelProviderService.ts');
+  const deepseekService = readFileIfExists('apps/web/src/modules/text-master/services/deepseekProviderService.ts');
+  const hasFile = fs.existsSync(path.join(ROOT_DIR, 'apps/web/src/modules/text-master/services/deepseekProviderService.ts'));
   const hasConfigUI = providerService.includes('getProviderConfig') || providerService.includes('updateProviderConfig');
   return {
     available: hasFile,
     apiKeyRequired: true,
     hasConfigUI,
-    providerFile: hasFile ? 'src/modules/text-master/services/deepseekProviderService.ts' : 'missing',
+    providerFile: hasFile ? 'apps/web/src/modules/text-master/services/deepseekProviderService.ts' : 'missing',
   };
 }
 
 function checkProviderBrainHub() {
   return {
-    available: fs.existsSync(path.join(ROOT_DIR, 'src/integrations/brain-hub/aiAdapter.ts')),
+    available: fs.existsSync(path.join(ROOT_DIR, 'apps/web/src/integrations/brain-hub/aiAdapter.ts')),
     optional: true,
     note: 'Brain Hub AI Provider 是可选集成，不影响本地运行。',
   };
 }
 
 function checkProviderConfigUI() {
-  const settingsVue = readFileIfExists('src/modules/text-master/pages/Settings.vue');
+  const settingsVue = readFileIfExists('apps/web/src/modules/text-master/pages/Settings.vue');
   const hasProviderSelect = settingsVue.includes('activeProviderId') || settingsVue.includes('onProviderChange');
   const hasTestConnection = settingsVue.includes('testProviderConnection') || settingsVue.includes('onTestConnection');
   const hasDeepseekConfig = settingsVue.includes('deepseekSettings') || settingsVue.includes('deepseek-config');

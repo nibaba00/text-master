@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import TopNav from '../components/TopNav.vue';
 import { textMasterRoutePaths } from '../routes';
 import type { TextProjectType } from '../types/project';
+import { templateRegistry } from '../templates/templateRegistry';
+import type { TemplateSpec } from '../templates/types';
 
 type TemplateCategory =
   | 'all'
@@ -24,6 +26,8 @@ type TemplateCard = {
   output: string;
   tags: string[];
   mockParams: Record<string, string>;
+  workflowId: string;
+  workspaceType: string;
 };
 
 const router = useRouter();
@@ -40,7 +44,7 @@ const categoryOptions: Array<{ value: TemplateCategory; label: string }> = [
   { value: 'readme', label: 'README' },
 ];
 
-const templates: TemplateCard[] = [
+const templates = [
   {
     id: 'short-drama-episode-outline',
     title: '短剧分集大纲',
@@ -133,15 +137,33 @@ const templates: TemplateCard[] = [
   },
 ];
 
+function toTemplateCard(template: TemplateSpec): TemplateCard {
+  return {
+    id: template.id,
+    title: template.name,
+    category: template.category,
+    projectType: template.projectType,
+    summary: template.summary,
+    scenario: template.scenario,
+    output: template.output,
+    tags: template.tags,
+    mockParams: template.mockParams,
+    workflowId: template.workflowId,
+    workspaceType: template.workspaceType,
+  };
+}
+
+const registryTemplates = templateRegistry.map(toTemplateCard);
+
 const filteredTemplates = computed(() => {
   if (selectedCategory.value === 'all') {
-    return templates;
+    return registryTemplates;
   }
 
-  return templates.filter((template) => template.category === selectedCategory.value);
+  return registryTemplates.filter((template) => template.category === selectedCategory.value);
 });
 
-const featuredTemplate = computed(() => filteredTemplates.value[0] ?? templates[0]);
+const featuredTemplate = computed(() => filteredTemplates.value[0] ?? registryTemplates[0]);
 
 async function useTemplate(template: TemplateCard): Promise<void> {
   lastTemplateAction.value = `已选择模板：${template.title}，正在进入新建项目流程。`;
@@ -151,6 +173,8 @@ async function useTemplate(template: TemplateCard): Promise<void> {
       source: 'template-market',
       template: template.id,
       type: template.projectType,
+      workflowId: template.workflowId,
+      workspaceType: template.workspaceType,
       mock: '1',
       ...template.mockParams,
     },
@@ -166,10 +190,10 @@ async function useTemplate(template: TemplateCard): Promise<void> {
       <div>
         <p>Template Market</p>
         <h1>模板中心</h1>
-        <span>面向文本生产的独立模板市场，模板只携带 Mock 参数进入新建项目流程。</span>
+        <span>模板市场只承载参数，选中后直接进入新建流程。</span>
       </div>
       <aside>
-        <span>Featured</span>
+        <span>精选</span>
         <strong>{{ featuredTemplate.title }}</strong>
         <p>{{ featuredTemplate.output }}</p>
       </aside>
@@ -221,7 +245,7 @@ async function useTemplate(template: TemplateCard): Promise<void> {
           >
             使用模板
           </button>
-          <span>{{ template.projectType }}</span>
+          <span>{{ template.projectType }} / {{ template.workflowId }}</span>
         </footer>
       </article>
     </section>
@@ -247,6 +271,7 @@ async function useTemplate(template: TemplateCard): Promise<void> {
   border-radius: var(--tm-radius-card);
   background: var(--tm-panel);
   box-shadow: var(--tm-shadow-card);
+  padding: 12px;
 }
 
 .tm-template-nav {
@@ -277,10 +302,10 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 .tm-template-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-  gap: 20px;
+  gap: 12px;
   max-width: var(--tm-page-max-width);
   margin: 10px auto 0;
-  padding: 14px;
+  padding: 12px;
 }
 
 .tm-template-hero p,
@@ -330,7 +355,7 @@ async function useTemplate(template: TemplateCard): Promise<void> {
 .tm-category-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 6px;
   max-width: var(--tm-page-max-width);
   margin: 10px auto 0;
   padding: 8px;
@@ -357,7 +382,7 @@ async function useTemplate(template: TemplateCard): Promise<void> {
   gap: 10px;
   max-width: var(--tm-page-max-width);
   margin: 10px auto 0;
-  max-height: calc(100vh - var(--tm-nav-height) - 290px);
+  max-height: calc(100vh - var(--tm-nav-height) - 270px);
   overflow: auto;
 }
 

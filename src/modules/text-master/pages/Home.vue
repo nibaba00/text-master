@@ -1,6 +1,41 @@
 <script setup lang="ts">
-import TopNav from '../components/TopNav.vue';
+import { onMounted, ref, watch } from 'vue';
+import HomeTopbar from '../components/HomeTopbar.vue';
+import TextMasterSidebar from '../components/TextMasterSidebar.vue';
 import { getTextMasterProjectPath, textMasterRoutePaths } from '../routes';
+
+const SIDEBAR_COLLAPSED_KEY = 'text-master:sidebar-collapsed';
+const sidebarCollapsed = ref(false);
+const storageUsage = '1.2GB / 8.8GB';
+
+function readSidebarCollapsed(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const storedValue = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+  if (storedValue === null) {
+    return window.innerWidth < 1120;
+  }
+
+  return storedValue === 'true';
+}
+
+function toggleSidebar(): void {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+}
+
+onMounted(() => {
+  sidebarCollapsed.value = readSidebarCollapsed();
+});
+
+watch(sidebarCollapsed, (value) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(value));
+});
 
 const quickTemplates = [
   ['短剧分集大纲', '快速生成短剧分集结构'],
@@ -62,10 +97,22 @@ const footerStats = [
 </script>
 
 <template>
-  <main class="tm-home-page" data-testid="text-master-home">
-    <TopNav />
+  <main
+    class="tm-home-page"
+    :class="{ 'text-master-home--sidebar-collapsed': sidebarCollapsed }"
+    data-testid="text-master-home"
+  >
+    <HomeTopbar />
 
-    <section class="tm-home-shell">
+    <section class="tm-home-body">
+      <TextMasterSidebar
+        :collapsed="sidebarCollapsed"
+        :storage-usage="storageUsage"
+        @toggle="toggleSidebar"
+      />
+
+      <section class="tm-home-content">
+        <section class="tm-home-shell">
       <section class="tm-home-top">
         <article class="tm-hero-panel">
           <p class="tm-runtime-badge">LOCAL WORKSPACE</p>
@@ -201,13 +248,20 @@ const footerStats = [
             <dd>{{ value }}</dd>
           </div>
         </dl>
-      </footer>
+        </footer>
+        </section>
+      </section>
     </section>
   </main>
 </template>
 
 <style scoped>
 .tm-home-page {
+  --tm-home-sidebar-width: 248px;
+  --tm-home-sidebar-collapsed-width: 76px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   height: 100vh;
   width: 100%;
   overflow: hidden;
@@ -216,11 +270,30 @@ const footerStats = [
   padding: var(--tm-page-padding);
 }
 
+.text-master-home--sidebar-collapsed {
+  --tm-home-sidebar-width: var(--tm-home-sidebar-collapsed-width);
+}
+
+.tm-home-body {
+  display: grid;
+  grid-template-columns: var(--tm-home-sidebar-width) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tm-home-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .tm-home-shell {
   display: grid;
   gap: 8px;
   width: min(100%, var(--tm-page-max-width));
-  margin: 6px auto 0;
+  min-width: 0;
+  margin: 0;
 }
 
 .tm-home-top {
@@ -475,7 +548,7 @@ const footerStats = [
 }
 
 .tm-project-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .tm-project-card {
@@ -563,6 +636,10 @@ const footerStats = [
 @media (max-width: 1120px) {
   .tm-home-page {
     overflow: auto;
+  }
+
+  .tm-home-body {
+    grid-template-columns: var(--tm-home-sidebar-collapsed-width) minmax(0, 1fr);
   }
 
   .tm-home-top,

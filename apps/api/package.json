@@ -1,0 +1,10 @@
+{
+  "name": "@text-master/api",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "node src/main.mjs",
+    "build": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.cpSync('src','dist',{recursive:true});\"",
+    "typecheck": "node -e \"const fs=require('node:fs'); const path=require('node:path'); const {spawnSync}=require('node:child_process'); function walk(dir){ return fs.readdirSync(dir,{withFileTypes:true}).flatMap((entry)=>{ const full=path.join(dir,entry.name); return entry.isDirectory()?walk(full):entry.name.endsWith('.mjs')?[full]:[]; }); } for (const file of walk('src')) { const result=spawnSync(process.execPath,['--check',file],{stdio:'inherit'}); if (result.status) process.exit(result.status); }\""
+  }
+}
