@@ -4018,7 +4018,13 @@ function formatUpdatedAt(value: string): string {
 }
 
 .tm-candidate-content pre {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
   margin: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   white-space: pre-wrap;
   word-break: break-word;
   color: #d4d4d8;
@@ -4046,3 +4052,4 @@ function formatUpdatedAt(value: string): string {
   }
 }
 </style>
+
